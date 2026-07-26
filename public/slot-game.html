@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎴 البطاقات</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root {
+  --bg:#0a0a0f; --surface:#111118; --surface2:#1a1a24;
+  --border:rgba(255,255,255,0.08); --accent:#ff0050;
+  --accent2:#25f4ee; --text:#f0f0f5; --muted:#666;
+  --green:#1dba72; --amber:#f59e0b;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Tajawal',sans-serif; min-height:100vh; }
+
+header {
+  background:var(--surface); border-bottom:1px solid var(--border);
+  padding:14px 20px; display:flex; align-items:center; justify-content:space-between;
+}
+.logo { font-size:18px; font-weight:700; }
+.logo span { color:var(--accent); }
+
+.container { max-width:700px; margin:0 auto; padding:20px 16px; display:flex; flex-direction:column; gap:14px; }
+
+.card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:18px 20px;
+}
+.card-title { font-size:12px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); margin-bottom:14px; }
+
+/* Settings grid */
+.settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.field { display:flex; flex-direction:column; gap:6px; }
+label { font-size:13px; color:#aaa; }
+input[type=text], select {
+  background:var(--surface2); border:1px solid var(--border);
+  color:var(--text); font-family:inherit; font-size:14px;
+  padding:8px 12px; border-radius:8px; outline:none;
+  transition:border-color .2s;
+}
+input[type=text]:focus, select:focus { border-color:var(--accent2); }
+
+/* Timer */
+.timer-display {
+  font-size:32px; font-weight:900; text-align:center;
+  color:var(--accent2); letter-spacing:2px; padding:8px 0;
+}
+.timer-display.warning { color:var(--amber); }
+.timer-display.ended   { color:var(--accent); }
+
+.timer-controls { display:flex; gap:8px; }
+.btn {
+  flex:1; border:none; font-family:inherit; font-size:14px; font-weight:700;
+  padding:10px; border-radius:10px; cursor:pointer; transition:all .15s;
+}
+.btn-start  { background:var(--green); color:#fff; }
+.btn-stop   { background:var(--accent); color:#fff; }
+.btn-reset  { background:var(--surface2); border:1px solid var(--border); color:var(--muted); }
+.btn:hover  { opacity:.85; }
+.btn:disabled { opacity:.4; cursor:not-allowed; }
+
+/* Spin button */
+.spin-section { text-align:center; }
+.spin-btn {
+  background:linear-gradient(135deg,var(--accent),#ff6b35);
+  color:#fff; border:none; font-family:inherit; font-size:20px; font-weight:900;
+  padding:16px 48px; border-radius:16px; cursor:pointer;
+  transition:all .2s; letter-spacing:.5px;
+  box-shadow:0 4px 24px rgba(255,0,80,.4);
+  width:100%;
+}
+.spin-btn:hover  { transform:translateY(-2px); box-shadow:0 8px 32px rgba(255,0,80,.5); }
+.spin-btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+
+/* Speed selector */
+.speed-tabs { display:flex; gap:8px; }
+.speed-tab {
+  flex:1; text-align:center; padding:8px; border-radius:8px;
+  font-size:13px; font-weight:600; cursor:pointer;
+  background:var(--surface2); border:1px solid var(--border); color:var(--muted);
+  transition:all .2s;
+}
+.speed-tab.active { border-color:var(--accent2); color:var(--accent2); background:rgba(37,244,238,.08); }
+
+/* Winner card */
+.winner-card {
+  background:rgba(255,215,0,.08); border:1px solid rgba(255,215,0,.3);
+  border-radius:12px; padding:16px; display:none;
+  text-align:center;
+}
+.winner-card.show { display:block; }
+.winner-name { font-size:22px; font-weight:900; color:#ffd700; margin:8px 0; }
+.winner-actions { display:flex; gap:8px; margin-top:12px; }
+.btn-keep   { background:var(--green); color:#fff; }
+.btn-remove { background:var(--surface2); border:1px solid var(--border); color:var(--muted); }
+
+/* Entries list */
+.entries-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.count-badge { font-size:13px; color:var(--muted); }
+.count-badge strong { color:var(--accent2); font-size:16px; }
+.clear-btn {
+  background:transparent; border:1px solid var(--border); color:var(--muted);
+  font-family:inherit; font-size:12px; padding:4px 10px; border-radius:7px; cursor:pointer;
+}
+.clear-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+.entries-list { max-height:280px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+.entry-item {
+  display:flex; align-items:center; gap:8px; padding:7px 8px;
+  border-radius:8px; transition:background .15s; animation:slideIn .2s ease;
+}
+.entry-item:hover { background:var(--surface2); }
+.entry-num { font-size:11px; color:var(--muted); width:22px; text-align:center; }
+.entry-avatar {
+  width:28px; height:28px; border-radius:50%; overflow:hidden;
+  background:var(--surface2); display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:700; color:var(--muted); flex-shrink:0;
+}
+.entry-avatar img { width:100%; height:100%; object-fit:cover; }
+.entry-name { font-size:13px; font-weight:600; flex:1; }
+.entry-new { color:var(--green); font-size:18px; }
+
+.empty { text-align:center; color:var(--muted); padding:24px; font-size:13px; }
+
+/* Overlay link */
+.overlay-link {
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:10px; padding:10px 14px;
+  font-family:monospace; font-size:12px; color:var(--accent2);
+  word-break:break-all; cursor:pointer; transition:border-color .2s;
+}
+.overlay-link:hover { border-color:var(--accent2); }
+
+@keyframes slideIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎰 Wheel <span>Control</span></div>
+  <div style="font-size:13px;color:var(--muted)" id="status-text">غير متصل</div>
+</header>
+
+<div class="container">
+
+  <!-- Settings -->
+  <div class="card">
+    <div class="card-title">الإعدادات</div>
+    <div class="field">
+      <label>كلمة التسجيل</label>
+      <input type="text" id="keyword-input" value="اشتراك" placeholder="اشتراك">
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn btn-start" style="font-size:13px;padding:8px" onclick="saveKeyword()">💾 حفظ الكلمة</button>
+    </div>
+  </div>
+
+  <!-- التسجيل -->
+  <div class="card">
+    <div class="card-title">📝 التسجيل</div>
+
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">⏱ مدة التسجيل (ثواني) — 0 = بدون وقت محدد</div>
+      <input type="number" id="reg-duration" value="0" min="0" max="600" step="10" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px">
+    </div>
+
+    <div id="timer-display" style="text-align:center;font-size:32px;font-weight:900;color:var(--accent2);margin-bottom:10px;display:none">00:00</div>
+
+    <div id="reg-status" style="text-align:center;font-size:14px;color:var(--muted);margin-bottom:12px">
+      اضغط <strong>ابدأ</strong> ليبدأ استقبال الأسماء من الchat
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-start" id="reg-start-btn" onclick="startRegistration()" style="flex:1">▶ ابدأ التسجيل</button>
+      <button class="btn btn-stop"  id="reg-stop-btn"  onclick="stopRegistration()" style="flex:1" disabled>⏹ إيقاف</button>
+    </div>
+  </div>
+
+  <!-- Spin -->
+  <div class="card spin-section">
+    <div class="card-title">تدوير البطاقات</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">⏱ مدة الدوران (ثواني)</div>
+        <input type="number" id="spin-duration" value="5" min="1" max="120" step="1" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px">
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">👁️ عدد الحسابات المعروضة</div>
+        <input type="number" id="visible-entries" value="3" min="1" max="10" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px">
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">🎨 لون البطاقة الفائزة</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="color-options">
+        <button onclick="setSlotColor('linear-gradient(135deg,#ff0050,#a57afa)')" style="width:36px;height:36px;border-radius:8px;border:2px solid #fff;cursor:pointer;background:linear-gradient(135deg,#ff0050,#a57afa)" title="أحمر بنفسجي"></button>
+        <button onclick="setSlotColor('linear-gradient(135deg,#ffd700,#f59e0b)')" style="width:36px;height:36px;border-radius:8px;border:2px solid transparent;cursor:pointer;background:linear-gradient(135deg,#ffd700,#f59e0b)" title="ذهبي"></button>
+        <button onclick="setSlotColor('linear-gradient(135deg,#25f4ee,#3b82f6)')" style="width:36px;height:36px;border-radius:8px;border:2px solid transparent;cursor:pointer;background:linear-gradient(135deg,#25f4ee,#3b82f6)" title="أزرق"></button>
+        <button onclick="setSlotColor('linear-gradient(135deg,#1dba72,#10b981)')" style="width:36px;height:36px;border-radius:8px;border:2px solid transparent;cursor:pointer;background:linear-gradient(135deg,#1dba72,#10b981)" title="أخضر"></button>
+        <button onclick="setSlotColor('linear-gradient(135deg,#ec4899,#f43f5e)')" style="width:36px;height:36px;border-radius:8px;border:2px solid transparent;cursor:pointer;background:linear-gradient(135deg,#ec4899,#f43f5e)" title="وردي"></button>
+        <button onclick="setSlotColor('linear-gradient(135deg,#f97316,#ef4444)')" style="width:36px;height:36px;border-radius:8px;border:2px solid transparent;cursor:pointer;background:linear-gradient(135deg,#f97316,#ef4444)" title="برتقالي"></button>
+        <button onclick="setSlotColor('linear-gradient(135deg,#8b5cf6,#6366f1)')" style="width:36px;height:36px;border-radius:8px;border:2px solid transparent;cursor:pointer;background:linear-gradient(135deg,#8b5cf6,#6366f1)" title="بنفسجي"></button>
+        <input type="color" id="custom-color" value="#ff0050" onchange="setSlotColor('linear-gradient(135deg,'+this.value+','+this.value+'cc)')" style="width:36px;height:36px;border-radius:8px;border:1px solid var(--border);cursor:pointer;padding:0" title="لون مخصص">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="spin-btn" id="spin-btn" onclick="spinWheel()" style="flex:2">🎰 دوّر</button>
+      <button class="btn" onclick="shuffleEntries()" style="flex:1;background:#a855f7;color:#fff;font-size:14px;padding:14px;border-radius:14px">🔀 بعثرة</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="setSpeed('slow')" id="speed-slow" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:12px;padding:8px">🐢 بطيء</button>
+      <button class="btn" onclick="setSpeed('normal')" id="speed-normal" style="flex:1;background:var(--accent2);color:#000;font-size:12px;padding:8px;border:1px solid var(--accent2)">⚡ عادي</button>
+      <button class="btn" onclick="setSpeed('fast')" id="speed-fast" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:12px;padding:8px">🚀 سريع</button>
+    </div>
+    <div id="spin-status" style="font-size:13px;color:var(--muted);margin-top:10px;text-align:center">أضف مشتركين ثم دوّر</div>
+  </div>
+
+  <!-- Winner -->
+  <div class="winner-card" id="winner-card">
+    <div style="font-size:14px;color:#aaa">🏆 الفائز</div>
+    <div class="winner-name" id="winner-name"></div>
+    <div class="winner-actions">
+      <button class="btn btn-keep" onclick="keepWinner()">✅ إبقاء في القائمة</button>
+      <button class="btn btn-remove" onclick="removeWinner()">🗑️ حذف من القائمة</button>
+    </div>
+  </div>
+
+  <!-- Entries -->
+  <div class="card">
+    <div class="entries-header">
+      <div class="count-badge">المشتركين: <strong id="count">0</strong></div>
+      <div style="display:flex;gap:6px">
+        <button class="clear-btn" onclick="clearEntries()">مسح الكل</button>
+      </div>
+    </div>
+
+    <!-- إضافة يدوية -->
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="text" id="manual-name" placeholder="أضف اسم يدوياً..." 
+        style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:13px;padding:7px 12px;border-radius:8px;outline:none">
+      <button onclick="addManual()" style="background:var(--green);color:#fff;border:none;font-family:inherit;font-size:13px;font-weight:700;padding:7px 14px;border-radius:8px;cursor:pointer">+ أضف</button>
+    </div>
+
+    <div class="entries-list" id="entries-list">
+      <div class="empty">في انتظار المشتركين...<br><small>اطلب من الجمهور يكتبون "<span id="kw-hint">اشتراك</span>"</small></div>
+    </div>
+  </div>
+
+  <!-- Overlay link -->
+  <div class="card">
+    <div class="card-title">رابط العجلة الدائرية لـ OBS</div>
+    <div class="overlay-link" id="overlay-link" onclick="copyLink()">...</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:6px">اضغط لنسخ الرابط — أضفه كـ Browser Source في OBS</div>
+  </div>
+
+  <!-- Slot Overlay link -->
+  <div class="card">
+    <div class="card-title">🎰 رابط البطاقات (Slot) لـ OBS</div>
+    <div class="overlay-link" id="slot-overlay-link" onclick="copySlotLink()">...</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:6px">اضغط لنسخ الرابط</div>
+  </div>
+
+</div>
+
+<script>
+const params   = new URLSearchParams(location.search);
+const username = params.get('username') || params.get('user') || '';
+const socket   = io();
+
+let entries     = [];
+let currentWinner = null;
+
+
+// Set overlay link
+const overlayUrl = `${location.origin}/wheel-overlay.html?username=${username}`;
+document.getElementById('overlay-link').textContent = overlayUrl;
+
+// Set slot overlay link
+let slotColor = 'linear-gradient(135deg,#ff0050,#a57afa)';
+let spinSpeed = 'normal';
+
+function updateSlotUrl() {
+  const visibleEntries = document.getElementById('visible-entries').value || 3;
+  const url = `${location.origin}/slot-overlay.html?username=${username}&color=${encodeURIComponent(slotColor)}&visible=${visibleEntries}`;
+  document.getElementById('slot-overlay-link').textContent = url;
+}
+const slotUrl = `${location.origin}/slot-overlay.html?username=${username}`;
+document.getElementById('slot-overlay-link').textContent = slotUrl;
+function copySlotLink() {
+  updateSlotUrl();
+  navigator.clipboard.writeText(document.getElementById('slot-overlay-link').textContent);
+  document.getElementById('slot-overlay-link').style.borderColor = '#1dba72';
+  setTimeout(() => document.getElementById('slot-overlay-link').style.borderColor = '', 1500);
+}
+
+function setSlotColor(color) {
+  slotColor = color;
+  document.querySelectorAll('#color-options button').forEach(b => b.style.borderColor = 'transparent');
+  event.target.style.borderColor = '#fff';
+  // Send color to overlay live via socket
+  socket.emit('slot:color', { username, color: slotColor });
+}
+
+function setSpeed(s) {
+  spinSpeed = s;
+  ['slow','normal','fast'].forEach(sp => {
+    const btn = document.getElementById('speed-' + sp);
+    if (sp === s) { btn.style.background = 'var(--accent2)'; btn.style.color = '#000'; btn.style.borderColor = 'var(--accent2)'; }
+    else { btn.style.background = 'var(--surface2)'; btn.style.color = 'var(--muted)'; btn.style.borderColor = 'var(--border)'; }
+  });
+}
+
+async function shuffleEntries() {
+  if (entries.length < 2) return;
+  // Shuffle locally
+  for (let i = entries.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [entries[i], entries[j]] = [entries[j], entries[i]];
+  }
+  renderEntries();
+  document.getElementById('spin-status').textContent = '🔀 تم بعثرة ' + entries.length + ' اسم';
+}
+
+// Connect
+if (username) {
+  socket.emit('join', { username });
+  document.getElementById('status-text').textContent = `@${username}`;
+}
+
+socket.on('wheel:update', ({ entries: e, keyword, newEntry, fullSync }) => {
+  if (fullSync) {
+    // تحديث كامل من السيرفر (حذف أو مسح)
+    entries = e || [];
+  } else if (newEntry) {
+    // إضافة جديدة فقط
+    const exists = entries.find(x => x.userId === newEntry.userId);
+    if (!exists) entries.push(newEntry);
+  } else {
+    // تحديث أولي عند join
+    entries = e || [];
+  }
+  if (keyword) {
+    document.getElementById('keyword-input').value = keyword;
+    const hint = document.getElementById('kw-hint');
+    if (hint) hint.textContent = keyword;
+  }
+  renderEntries();
+});
+
+// Load existing
+if (username) {
+  fetch(`/api/wheel/${username}`).then(r => r.json()).then(data => {
+    entries = data.entries || [];
+    if (data.keyword) {
+      document.getElementById('keyword-input').value = data.keyword;
+      const hint = document.getElementById('kw-hint');
+      if (hint) hint.textContent = data.keyword;
+    }
+    setAccepting(data.accepting || false);
+    renderEntries();
+  });
+}
+
+// ── Settings ──────────────────────────────────────────────
+function saveKeyword() {
+  const kw = document.getElementById('keyword-input').value.trim();
+  if (!kw || !username) return;
+  const hint = document.getElementById('kw-hint');
+  if (hint) hint.textContent = kw;
+  fetch('/api/wheel/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, keyword: kw }) });
+}
+
+// ── Registration ──────────────────────────────────────────
+let accepting = false;
+let regTimer = null;
+let regEndTime = 0;
+
+async function startRegistration() {
+  const duration = parseInt(document.getElementById('reg-duration').value) || 0;
+  await fetch('/api/wheel/start-registration', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, duration }),
+  });
+  setAccepting(true);
+  if (duration > 0) startTimer(duration);
+}
+
+async function stopRegistration() {
+  await fetch('/api/wheel/stop-registration', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+  setAccepting(false);
+  stopTimer();
+}
+
+function startTimer(seconds) {
+  regEndTime = Date.now() + seconds * 1000;
+  const disp = document.getElementById('timer-display');
+  disp.style.display = 'block';
+  disp.classList.remove('warning', 'ended');
+  updateTimer();
+  if (regTimer) clearInterval(regTimer);
+  regTimer = setInterval(updateTimer, 100);
+}
+
+function updateTimer() {
+  const disp = document.getElementById('timer-display');
+  const remainMs = Math.max(0, regEndTime - Date.now());
+  const sec = Math.ceil(remainMs / 1000);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  disp.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  if (sec <= 10 && sec > 0) disp.classList.add('warning');
+  if (remainMs <= 0) {
+    stopTimer();
+    stopRegistration();
+  }
+}
+
+function stopTimer() {
+  if (regTimer) clearInterval(regTimer);
+  regTimer = null;
+  const disp = document.getElementById('timer-display');
+  disp.style.display = 'none';
+}
+
+function setAccepting(on) {
+  accepting = on;
+  const statusEl = document.getElementById('reg-status');
+  const startBtn = document.getElementById('reg-start-btn');
+  const stopBtn  = document.getElementById('reg-stop-btn');
+  if (on) {
+    statusEl.innerHTML = '🟢 التسجيل مفتوح — الأسماء تُضاف تلقائياً من chat';
+    statusEl.style.color = '#1dba72';
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  } else {
+    const kw = document.getElementById('keyword-input').value || 'اشتراك';
+    statusEl.innerHTML = `اضغط <strong>ابدأ</strong> ليبدأ استقبال الأسماء من chat`;
+    statusEl.style.color = 'var(--muted)';
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  }
+}
+
+socket.on('wheel:registration', ({ accepting: a }) => setAccepting(a));
+
+// ── Spin ──────────────────────────────────────────────────
+async function spinWheel() {
+  if (entries.length < 2) return;
+  document.getElementById('spin-btn').disabled = true;
+  document.getElementById('spin-status').textContent = '🎲 جاري الدوران...';
+  document.getElementById('winner-card').classList.remove('show');
+
+  const duration = Math.max(1, Math.min(120, parseInt(document.getElementById('spin-duration').value) || 5));
+
+  const res = await fetch('/api/wheel/spin', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, duration, speed: spinSpeed }),
+  });
+  const data = await res.json();
+
+  if (data.ok) {
+    currentWinner = data.winner;
+    setTimeout(() => {
+      document.getElementById('winner-name').textContent = data.winner.name;
+      document.getElementById('winner-card').classList.add('show');
+      document.getElementById('spin-status').textContent = `🏆 الفائز: ${data.winner.name}`;
+      document.getElementById('spin-btn').disabled = false;
+    }, duration * 1000);
+  } else {
+    document.getElementById('spin-btn').disabled = false;
+    document.getElementById('spin-status').textContent = data.message || 'خطأ';
+  }
+}
+
+function keepWinner() {
+  document.getElementById('winner-card').classList.remove('show');
+  currentWinner = null;
+}
+
+async function removeWinner() {
+  if (!currentWinner) return;
+  entries = entries.filter(e => e.userId !== currentWinner.userId);
+  await fetch('/api/wheel/remove-winner', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, userId: currentWinner.userId }) });
+  document.getElementById('winner-card').classList.remove('show');
+  currentWinner = null;
+  renderEntries();
+}
+
+async function addManual() {
+  const input = document.getElementById('manual-name');
+  const name = input.value.trim();
+  if (!name || !username) return;
+  input.value = '';
+  await fetch('/api/wheel/add', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, name }),
+  });
+}
+
+async function removeEntry(userId) {
+  entries = entries.filter(e => e.userId !== userId);
+  renderEntries();
+  await fetch('/api/wheel/remove', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, userId }),
+  });
+}
+
+async function clearEntries() {
+  if (!confirm('مسح كل المشتركين؟')) return;
+  await fetch('/api/wheel/clear', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) });
+  // مسح محلي فوراً
+  entries = [];
+  renderEntries();
+}
+
+// ── Render ────────────────────────────────────────────────
+function renderEntries() {
+  const list = document.getElementById('entries-list');
+  document.getElementById('count').textContent = entries.length;
+  document.getElementById('spin-btn').disabled = entries.length < 2;
+  document.getElementById('spin-status').textContent = entries.length < 2 ? 'أضف مشتركين ثم دوّر' : `${entries.length} مشترك — جاهز للدوران 🎰`;
+
+  if (!entries.length) {
+    const kw = document.getElementById('keyword-input').value || 'اشتراك';
+    list.innerHTML = `<div class="empty">في انتظار المشتركين...<br><small>اطلب يكتبون "<strong>${kw}</strong>"</small></div>`;
+    return;
+  }
+
+  const display = entries.slice(-50).reverse();
+  list.innerHTML = display.map((e,i) => `
+    <div class="entry-item">
+      <span class="entry-num">${entries.length - i}</span>
+      <div class="entry-avatar">${e.avatar ? `<img src="${e.avatar}" onerror="this.parentElement.textContent='${e.name[0]}'">` : e.name[0]}</div>
+      <span class="entry-name">${escHtml(e.name)}</span>
+      <button onclick="removeEntry('${e.userId}')" style="background:transparent;border:none;color:#555;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#555'">✕</button>
+    </div>`).join('');
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(overlayUrl);
+  const el = document.getElementById('overlay-link');
+  el.style.color = '#1dba72';
+  setTimeout(() => el.style.color = '', 1500);
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+
+// Enter لإضافة يدوية
+document.getElementById('manual-name').addEventListener('keydown', e => { if (e.key === 'Enter') addManual(); });
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

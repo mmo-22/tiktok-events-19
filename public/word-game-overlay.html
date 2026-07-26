@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Word Game Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    background:transparent;
+    width:100vw; height:100vh;
+    font-family:'Tajawal',sans-serif;
+    overflow:hidden;
+  }
+
+  .overlay {
+    position:fixed; top:16px; left:16px;
+    display:flex; flex-direction:column; gap:10px;
+    max-width:280px;
+    opacity:0; transition:opacity .4s;
+    pointer-events:none;
+  }
+  .overlay.show { opacity:1; }
+
+  /* Header */
+  .game-header {
+    background:rgba(0,0,0,.85);
+    border:1px solid rgba(37,244,238,.3);
+    border-radius:12px; padding:10px 14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .game-icon { font-size:20px; }
+  .game-info { flex:1; }
+  .game-title { font-size:13px; font-weight:700; color:#25f4ee; }
+  .game-count { font-size:11px; color:#aaa; }
+
+  /* Winners list */
+  .winners-box {
+    background:rgba(0,0,0,.8);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:12px; padding:10px;
+    display:flex; flex-direction:column; gap:5px;
+    max-height:300px; overflow:hidden;
+  }
+
+  .winner-row {
+    display:flex; align-items:center; gap:7px;
+    padding:5px 6px; border-radius:8px;
+    animation:popIn .3s ease;
+  }
+  .winner-row.top { background:rgba(255,215,0,.08); }
+
+  .rank { font-size:14px; width:22px; text-align:center; flex-shrink:0; }
+  .av {
+    width:26px; height:26px; border-radius:50%; overflow:hidden;
+    background:#1a1a24; display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:700; color:#666; flex-shrink:0;
+  }
+  .av img { width:100%; height:100%; object-fit:cover; }
+  .wname { flex:1; font-size:13px; font-weight:600; color:#f0f0f5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .wcnt {
+    font-size:11px; color:#25f4ee; font-weight:700;
+    background:rgba(37,244,238,.1); padding:1px 7px; border-radius:20px;
+  }
+
+  /* New winner popup */
+  #new-winner {
+    position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(80px);
+    background:rgba(0,0,0,.9); border:2px solid #25f4ee;
+    border-radius:16px; padding:12px 24px; text-align:center;
+    opacity:0; transition:all .4s cubic-bezier(.34,1.56,.64,1);
+    pointer-events:none; white-space:nowrap;
+  }
+  #new-winner.show { transform:translateX(-50%) translateY(0); opacity:1; }
+  .nw-label { font-size:12px; color:#aaa; }
+  .nw-name  { font-size:20px; font-weight:900; color:#25f4ee; }
+
+  @keyframes popIn { from{opacity:0;transform:scale(.8)} to{opacity:1;transform:scale(1)} }
+</style>
+</head>
+<body>
+
+<div class="overlay" id="overlay">
+  <div class="game-header">
+    <div class="game-icon">🔤</div>
+    <div class="game-info">
+      <div class="game-title">لعبة الكلمات</div>
+      <div class="game-count" id="game-count">في انتظار اللاعبين</div>
+    </div>
+  </div>
+  <div class="winners-box" id="winners-box"></div>
+</div>
+
+<div id="new-winner">
+  <div class="nw-label">✅ إجابة صحيحة!</div>
+  <div class="nw-name" id="nw-name"></div>
+</div>
+
+<script>
+const params   = new URLSearchParams(location.search);
+const username = params.get('username') || '';
+const socket   = io();
+
+let winners    = [];
+let nwTimer    = null;
+
+if (username) socket.emit('join', { username });
+
+socket.on('word:started', () => {
+  winners = [];
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('winners-box').innerHTML = '';
+  document.getElementById('game-count').textContent = 'في انتظار اللاعبين';
+});
+
+socket.on('word:stopped', () => {
+  setTimeout(() => document.getElementById('overlay').classList.remove('show'), 3000);
+});
+
+socket.on('word:update', ({ winners: w, newWinner }) => {
+  winners = w || [];
+  renderWinners();
+  if (newWinner) showNewWinner(newWinner.name);
+});
+
+// Load existing
+if (username) {
+  fetch(`/api/word/${username}`).then(r => r.json()).then(data => {
+    winners = data.winners || [];
+    if (data.active) {
+      document.getElementById('overlay').classList.add('show');
+      renderWinners();
+    }
+  });
+}
+
+function renderWinners() {
+  const box = document.getElementById('winners-box');
+  document.getElementById('game-count').textContent = `${winners.length} لاعب خمّن الكلمة`;
+
+  if (!winners.length) {
+    box.innerHTML = '';
+    return;
+  }
+
+  const rankIcon = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
+  const top5 = winners.slice(0, 8);
+  box.innerHTML = top5.map((w, i) => `
+    <div class="winner-row ${i < 3 ? 'top' : ''}">
+      <span class="rank">${rankIcon(i)}</span>
+      <div class="av">${w.avatar ? `<img src="${w.avatar}" onerror="this.parentElement.textContent='${w.name[0]}'">` : w.name[0]}</div>
+      <span class="wname">${escHtml(w.name)}</span>
+      <span class="wcnt">× ${w.count}</span>
+    </div>`).join('');
+}
+
+function showNewWinner(name) {
+  if (nwTimer) clearTimeout(nwTimer);
+  document.getElementById('nw-name').textContent = name;
+  document.getElementById('new-winner').classList.add('show');
+  nwTimer = setTimeout(() => document.getElementById('new-winner').classList.remove('show'), 3000);
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

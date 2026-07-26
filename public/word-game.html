@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔤 خمّن الكلمة — فعاليات تيك توك</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root{
+  --bg:#06060b;--bg2:#0a0a14;--card:#0c0c16;--card2:#10101e;--card3:#161628;--border:#1c1c2e;
+  --accent:#0891b2;--accent2:#22d3ee;--gold:#f5c542;
+  --text:#e8eaf2;--muted:#8a8fa3;
+  --green:#22c55e;--red:#ef4444;--purple:#a855f7;--orange:#f97316;--blue:#3b82f6
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;min-height:100vh;padding:18px 12px 60px}
+
+.btn{font-family:inherit;font-weight:900;border:none;border-radius:12px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:active{transform:scale(.95)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;padding:10px 20px;font-size:.88rem;box-shadow:0 4px 18px rgba(8,145,178,.35)}
+.btn-success{background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;padding:10px 20px;font-size:.88rem;box-shadow:0 4px 18px rgba(34,197,94,.35)}
+.btn-danger{background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;padding:10px 20px;font-size:.88rem;box-shadow:0 4px 18px rgba(239,68,68,.35)}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text);padding:9px 16px;font-size:.82rem}
+.btn-ghost:hover{border-color:var(--accent2);color:var(--accent2)}
+.btn-sm{padding:6px 12px;font-size:.75rem;border-radius:9px}
+
+.input,.select{background:var(--card3);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:10px;font-family:inherit;font-size:.82rem;outline:none;transition:.2s;width:100%}
+.input:focus,.select:focus{border-color:var(--accent2);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.field-label{display:block;font-size:.74rem;color:var(--muted);font-weight:700;margin-bottom:5px}
+
+.toggle{width:36px;height:21px;border-radius:30px;background:#2a2a44;position:relative;cursor:pointer;transition:.25s;flex-shrink:0}
+.toggle::after{content:"";position:absolute;top:2px;right:2px;width:17px;height:17px;border-radius:50%;background:#fff;transition:.25s}
+.toggle.on{background:var(--green)}
+.toggle.on::after{right:17px}
+
+.topnav{max-width:780px;margin:0 auto 14px;display:flex;align-items:center;justify-content:space-between}
+.topnav a{color:var(--accent2);text-decoration:none;font-weight:900;font-size:.8rem;border:1px solid var(--border);padding:7px 14px;border-radius:30px;background:var(--card);transition:.2s}
+.topnav a:hover{border-color:var(--accent2)}
+.topnav .who{font-size:.8rem;color:var(--muted);font-weight:900;direction:ltr}
+
+/* Floating Hub */
+.fh{max-width:780px;margin:0 auto;position:relative}
+
+.fh-hero{background:linear-gradient(145deg,var(--card),#1c1145);border:1px solid var(--border);border-radius:22px;padding:30px;text-align:center;position:relative;overflow:hidden;margin-bottom:14px}
+.fh-hero::before{content:"";position:absolute;top:-100px;right:-100px;width:300px;height:300px;background:radial-gradient(circle,rgba(168,85,247,.25),transparent 65%);pointer-events:none}
+.fh-hero::after{content:"";position:absolute;bottom:-80px;left:-80px;width:220px;height:220px;background:radial-gradient(circle,rgba(34,211,238,.18),transparent 65%);pointer-events:none}
+.fh-icon{font-size:3rem;margin-bottom:6px;filter:drop-shadow(0 0 22px rgba(168,85,247,.6));position:relative}
+.fh-title{font-size:1.6rem;font-weight:900;margin-bottom:4px;position:relative}
+.fh-status{display:inline-flex;align-items:center;gap:7px;background:rgba(125,125,125,.12);border:1px solid #444;color:#999;padding:5px 14px;border-radius:30px;font-weight:900;font-size:.8rem;margin-top:6px;position:relative;transition:.3s}
+.fh-status.on{background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.4);color:#86efac}
+.fh-status .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.fh-status.on .dot{background:#22c55e;animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.4}}
+
+.fh-word{display:flex;justify-content:center;gap:8px;margin:22px 0 6px;position:relative;flex-wrap:wrap}
+.fh-letter{width:54px;height:64px;background:#0c0c16cc;backdrop-filter:blur(10px);border:2px solid rgba(168,85,247,.4);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:900;color:#d8b4fe;box-shadow:0 0 20px rgba(168,85,247,.2)}
+.fh-letter.space{background:transparent;border:none;box-shadow:none;width:20px}
+.fh-word-empty{color:var(--muted);font-size:.85rem;padding:20px 0;position:relative}
+.fh-hint{font-size:.85rem;color:var(--muted);position:relative;margin-bottom:8px;min-height:1.4em}
+.fh-hint b{color:var(--gold)}
+
+.fh-input-row{display:flex;gap:8px;justify-content:center;margin:16px auto 0;max-width:480px;position:relative}
+.fh-input-row .input{text-align:center;font-weight:900;font-size:1rem;letter-spacing:1px}
+
+.fh-meta{display:flex;justify-content:center;gap:24px;margin-top:18px;position:relative}
+.fhm{text-align:center}
+.fhm b{display:block;font-size:1.5rem;font-weight:900;color:#fff}
+.fhm span{font-size:.66rem;color:var(--muted)}
+
+.fh-hero-actions{margin-top:20px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;position:relative}
+
+/* Quick actions */
+.fh-quick{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:4px}
+.fhq{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px 8px;cursor:pointer;transition:.2s;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:5px;font-family:inherit;color:var(--text)
+}
+.fhq:hover{transform:translateY(-3px);border-color:var(--accent2)}
+.fhq .ic{font-size:1.5rem;filter:drop-shadow(0 0 10px currentColor)}
+.fhq .nm{font-size:.74rem;font-weight:900;color:var(--text)}
+.fhq .sub{font-size:.62rem;color:var(--muted)}
+.fhq.danger:hover{border-color:#ef4444}
+.fhq.danger .ic{color:#ef4444}
+.fhq.on{border-color:rgba(249,115,22,.5);background:rgba(249,115,22,.06)}
+
+/* Drawer */
+.fh-drawer-trigger{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;background:var(--card);border:1px solid var(--border);
+  color:var(--text);padding:12px;border-radius:14px;
+  font-family:inherit;font-weight:900;font-size:.85rem;cursor:pointer;
+  margin-top:14px
+}
+.fh-drawer-trigger:hover{border-color:var(--accent2)}
+.fh-drawer{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  margin-top:10px;overflow:hidden;
+  max-height:0;transition:max-height .35s ease
+}
+.fh-drawer.open{max-height:500px}
+.fh-drawer-inner{padding:16px}
+.fh-drawer-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+
+/* Winners */
+.win-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:14px}
+.win-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.win-head h4{font-size:.85rem;font-weight:900}
+.win-head .count{background:var(--card2);border:1px solid var(--border);color:var(--accent2);padding:3px 12px;border-radius:14px;font-size:.7rem;font-weight:900}
+.winners-list{max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:5px}
+.winner-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--card2);border:1px solid var(--border);animation:slideIn .2s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1}}
+.winner-rank{font-size:.78rem;font-weight:900;color:var(--muted);width:26px;text-align:center;flex-shrink:0}
+.winner-rank.gold{color:#ffd700}
+.winner-rank.silver{color:#c0c0c0}
+.winner-rank.bronze{color:#cd7f32}
+.winner-avatar{width:30px;height:30px;border-radius:50%;overflow:hidden;background:var(--card3);display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:900;color:var(--muted);flex-shrink:0}
+.winner-avatar img{width:100%;height:100%;object-fit:cover}
+.winner-name{flex:1;font-size:.8rem;font-weight:900}
+.winner-count{font-size:.7rem;background:rgba(34,211,238,.1);color:var(--accent2);padding:2px 9px;border-radius:20px;font-weight:900}
+.empty{text-align:center;color:var(--muted);padding:24px;font-size:.76rem;line-height:1.8}
+
+.obs-link{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:.7rem;color:var(--accent2);display:flex;align-items:center;gap:8px;font-family:monospace;margin-top:14px}
+.obs-link b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:left;font-weight:400}
+
+@media(max-width:600px){
+  input,select,textarea,.input,.select{font-size:16px !important}
+  .fh-quick{grid-template-columns:repeat(2,1fr)}
+  .fh-letter{width:42px;height:50px;font-size:1.4rem}
+  .fh-drawer-grid{grid-template-columns:1fr}
+  body{padding:12px 8px 50px}
+  .fh-hero{padding:22px 14px}
+  .fh-title{font-size:1.3rem}
+  .fh-meta{gap:16px}
+  .fh-hero-actions .btn{flex:1}
+  .fh-drawer-grid > div[style*="span 2"]{grid-column:span 1 !important}
+}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <a href="/admin.html">← لوحة الأدمن</a>
+  <span class="who" id="who">—</span>
+</div>
+
+<div class="fh">
+
+  <!-- Hero -->
+  <div class="fh-hero">
+    <div class="fh-icon">🔤</div>
+    <h1 class="fh-title">خمّن الكلمة</h1>
+    <div class="fh-status" id="status-badge"><span class="dot"></span> <span id="status-txt">متوقف</span></div>
+    <div style="font-size:.74rem;color:#9ca3af;margin-top:10px;position:relative;line-height:1.7">💡 كلمة سرية بتلميح — أول من يخمنها بالشات يفوز 🏆</div>
+
+    <div class="fh-word" id="fh-word"><div class="fh-word-empty">اكتب كلمة تحت أو اضغط 🎲 كلمة عشوائية</div></div>
+    <div class="fh-hint" id="fh-hint"></div>
+
+    <div class="fh-input-row">
+      <input class="input" type="text" id="word-input" placeholder="اكتب الكلمة السرية...">
+    </div>
+
+    <div class="fh-meta">
+      <div class="fhm"><b id="meta-winners">0</b><span>فائز</span></div>
+      <div class="fhm"><b id="meta-bank">0</b><span>كلمة بالبنك</span></div>
+      <div class="fhm"><b id="meta-used" style="color:var(--gold)">0</b><span>مستخدمة</span></div>
+    </div>
+
+    <div class="fh-hero-actions">
+      <button class="btn btn-success" id="start-btn" onclick="startGame()">▶ ابدأ الجولة</button>
+      <button class="btn btn-danger" id="stop-btn" onclick="stopGame()" disabled>⏹ إيقاف</button>
+    </div>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="fh-quick">
+    <button class="fhq" onclick="randomWord()">
+      <span class="ic" style="color:#22d3ee">🎲</span>
+      <span class="nm">كلمة عشوائية</span>
+      <span class="sub">من البنك</span>
+    </button>
+    <button class="fhq" id="auto-btn" onclick="toggleAuto()">
+      <span class="ic" style="color:#f97316" id="auto-ic">▶</span>
+      <span class="nm" id="auto-nm">أوتوماتيك</span>
+      <span class="sub" id="auto-sub">كلمة تلو كلمة</span>
+    </button>
+    <button class="fhq" onclick="copyLink()">
+      <span class="ic" style="color:#f5c542">📋</span>
+      <span class="nm">نسخ رابط OBS</span>
+      <span class="sub">للأوفرلي</span>
+    </button>
+    <button class="fhq danger" onclick="clearWinners()">
+      <span class="ic">🗑</span>
+      <span class="nm">مسح الفائزين</span>
+      <span class="sub">تصفير القائمة</span>
+    </button>
+  </div>
+
+  <!-- Drawer -->
+  <button class="fh-drawer-trigger" onclick="document.getElementById('drawer').classList.toggle('open');this.querySelector('.arr').textContent=document.getElementById('drawer').classList.contains('open')?'⌃':'⌄'">
+    ⚙️ إعدادات الجولة <span class="arr">⌄</span>
+  </button>
+  <div class="fh-drawer" id="drawer">
+    <div class="fh-drawer-inner">
+      <div class="fh-drawer-grid">
+        <div>
+          <label class="field-label">💡 التلميح (اختياري)</label>
+          <input class="input" type="text" id="hint-input" placeholder="مثال: حيوان...">
+        </div>
+        <div>
+          <label class="field-label">⏱ مدة السؤال بالأوتوماتيك (ثواني)</label>
+          <input class="input" type="number" id="duration-input" value="30" min="5" max="120">
+        </div>
+        <div style="grid-column:span 2">
+          <label class="field-label">🗂 فئة الكلمات العشوائية</label>
+          <select class="select" id="category-filter"><option value="all">الكل</option></select>
+        </div>
+        <div style="grid-column:span 2;background:var(--card2);border:1px solid rgba(245,197,66,.3);border-radius:12px;padding:10px">
+          <label class="field-label">📜 شروط اللعب — تظهر بالأوفرلي بستايل كوميك (شرط بكل سطر)</label>
+          <textarea class="input" id="rules-text" rows="4" style="resize:vertical;line-height:1.9">شوف التلميح وخمّن الكلمة السرية
+اكتب تخمينك مباشرة بالشات
+أول من يكتب الكلمة الصحيحة يفوز 🏆
+كل جولة كلمة جديدة — خلك جاهز</textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+            <input class="input" type="number" id="rules-duration" value="10" min="3" max="120" style="width:80px" title="مدة العرض بالثواني">
+            <button class="btn btn-warn btn-sm" style="flex:1" onclick="showRulesThenStart()">📜 اعرض الشروط ثم ابدأ الجولة</button>
+            <button class="btn btn-ghost btn-sm" onclick="hideRules()">إخفاء</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Winners -->
+  <div class="win-card">
+    <div class="win-head">
+      <h4>🏆 الفائزين</h4>
+      <span class="count"><span id="count">0</span> فائز</span>
+    </div>
+    <div class="winners-list" id="winners-list">
+      <div class="empty">في انتظار اللاعبين...<br><small>ابدأ اللعبة وأخبر الجمهور يخمنون الكلمة</small></div>
+    </div>
+  </div>
+
+  <div class="obs-link"><b id="overlay-link">...</b><button class="btn btn-sm btn-ghost" onclick="copyLink()">نسخ</button></div>
+
+</div>
+
+<script>
+const params   = new URLSearchParams(location.search);
+const username = params.get('username') || params.get('user') || '';
+const socket   = io();
+
+let winners = [];
+let gameActive = false;
+
+const overlayUrl = `${location.origin}/word-game-overlay.html?username=${username}`;
+document.getElementById('overlay-link').textContent = overlayUrl;
+if (username) document.getElementById('who').textContent = '@' + username;
+
+const WORD_BANK = [
+  {word:"تمساح",hint:"حيوان زاحف",cat:"حيوانات"},{word:"زرافة",hint:"أطول حيوان",cat:"حيوانات"},{word:"فهد",hint:"أسرع حيوان",cat:"حيوانات"},
+  {word:"دلفين",hint:"ذكي بالبحر",cat:"حيوانات"},{word:"نسر",hint:"طائر جارح",cat:"حيوانات"},{word:"غزال",hint:"سريع ورشيق",cat:"حيوانات"},
+  {word:"حصان",hint:"يُركب ويُسابق",cat:"حيوانات"},{word:"فيل",hint:"أكبر حيوان بري",cat:"حيوانات"},{word:"صقر",hint:"طائر الصيد",cat:"حيوانات"},
+  {word:"ذئب",hint:"يعوي بالليل",cat:"حيوانات"},{word:"سلحفاة",hint:"بطيئة وتحمل بيتها",cat:"حيوانات"},{word:"ثعبان",hint:"زاحف بلا أرجل",cat:"حيوانات"},
+  {word:"بطريق",hint:"طائر لا يطير",cat:"حيوانات"},{word:"جمل",hint:"سفينة الصحراء",cat:"حيوانات"},{word:"اسد",hint:"ملك الغابة",cat:"حيوانات"},
+  {word:"نمر",hint:"مخطط ومفترس",cat:"حيوانات"},{word:"قرد",hint:"يشبه الانسان",cat:"حيوانات"},{word:"ارنب",hint:"أذنان طويلتان",cat:"حيوانات"},
+  {word:"حوت",hint:"أكبر كائن بحري",cat:"حيوانات"},{word:"باندا",hint:"دب أبيض وأسود",cat:"حيوانات"},{word:"كنغر",hint:"يقفز ويحمل صغاره",cat:"حيوانات"},
+  {word:"طاووس",hint:"ريش ملون جميل",cat:"حيوانات"},{word:"فلامنقو",hint:"طائر وردي",cat:"حيوانات"},{word:"راكون",hint:"يشبه اللص",cat:"حيوانات"},
+  {word:"تفاح",hint:"فاكهة سقطت على نيوتن",cat:"فواكه"},{word:"موز",hint:"فاكهة صفراء",cat:"فواكه"},{word:"برتقال",hint:"فاكهة بنفس اسم لونها",cat:"فواكه"},
+  {word:"فراولة",hint:"حمراء صغيرة",cat:"فواكه"},{word:"مانجو",hint:"ملك الفواكه",cat:"فواكه"},{word:"اناناس",hint:"فاكهة لها تاج",cat:"فواكه"},
+  {word:"بطيخ",hint:"فاكهة صيفية كبيرة",cat:"فواكه"},{word:"رمان",hint:"حبوبها حمراء",cat:"فواكه"},{word:"كيوي",hint:"فاكهة خضراء من الداخل",cat:"فواكه"},
+  {word:"تين",hint:"فاكهة ذكرت بالقرآن",cat:"فواكه"},{word:"خوخ",hint:"فاكهة ناعمة",cat:"فواكه"},{word:"عنب",hint:"يأتي في عناقيد",cat:"فواكه"},
+  {word:"ليمون",hint:"فاكهة حامضة",cat:"فواكه"},{word:"جوافة",hint:"فاكهة استوائية",cat:"فواكه"},{word:"افوكادو",hint:"فاكهة خضراء كريمية",cat:"فواكه"},
+  {word:"السعودية",hint:"فيها الحرمين",cat:"دول"},{word:"مصر",hint:"أم الدنيا",cat:"دول"},{word:"فرنسا",hint:"فيها برج إيفل",cat:"دول"},
+  {word:"اليابان",hint:"بلاد الشمس المشرقة",cat:"دول"},{word:"البرازيل",hint:"بلد السامبا",cat:"دول"},{word:"تركيا",hint:"بين قارتين",cat:"دول"},
+  {word:"ايطاليا",hint:"بلد البيتزا",cat:"دول"},{word:"الهند",hint:"ثاني أكبر سكاناً",cat:"دول"},{word:"المغرب",hint:"بلد شمال أفريقي",cat:"دول"},
+  {word:"الامارات",hint:"فيها برج خليفة",cat:"دول"},{word:"الكويت",hint:"دولة خليجية",cat:"دول"},{word:"قطر",hint:"استضافت كأس العالم",cat:"دول"},
+  {word:"الاردن",hint:"فيها البتراء",cat:"دول"},{word:"لبنان",hint:"بلد الأرز",cat:"دول"},{word:"العراق",hint:"بلاد الرافدين",cat:"دول"},
+  {word:"الرياض",hint:"عاصمة السعودية",cat:"مدن"},{word:"جدة",hint:"عروس البحر الأحمر",cat:"مدن"},{word:"مكة",hint:"أقدس مدينة",cat:"مدن"},
+  {word:"المدينة",hint:"فيها المسجد النبوي",cat:"مدن"},{word:"دبي",hint:"مدينة الأبراج",cat:"مدن"},{word:"لندن",hint:"عاصمة بريطانيا",cat:"مدن"},
+  {word:"باريس",hint:"مدينة النور",cat:"مدن"},{word:"طوكيو",hint:"عاصمة اليابان",cat:"مدن"},{word:"القاهرة",hint:"عاصمة مصر",cat:"مدن"},
+  {word:"اسطنبول",hint:"مدينة على مضيقين",cat:"مدن"},{word:"نيويورك",hint:"مدينة لا تنام",cat:"مدن"},{word:"روما",hint:"المدينة الخالدة",cat:"مدن"},
+  {word:"كبسة",hint:"أشهر أكلة سعودية",cat:"طعام"},{word:"شاورما",hint:"لحم ملفوف بخبز",cat:"طعام"},{word:"بيتزا",hint:"أكلة إيطالية",cat:"طعام"},
+  {word:"برجر",hint:"ساندويتش أمريكي",cat:"طعام"},{word:"سوشي",hint:"أكلة يابانية",cat:"طعام"},{word:"فلافل",hint:"كرات مقلية",cat:"طعام"},
+  {word:"كنافة",hint:"حلوى بالجبن",cat:"طعام"},{word:"مندي",hint:"أكلة يمنية",cat:"طعام"},{word:"سمبوسة",hint:"مثلثة ومقلية",cat:"طعام"},
+  {word:"بقلاوة",hint:"حلوى بالفستق",cat:"طعام"},{word:"مشاوي",hint:"لحم على الفحم",cat:"طعام"},{word:"كشري",hint:"أكلة مصرية",cat:"طعام"},
+  {word:"ايفون",hint:"هاتف أبل",cat:"تكنولوجيا"},{word:"يوتيوب",hint:"منصة فيديوهات",cat:"تكنولوجيا"},{word:"واتساب",hint:"تطبيق محادثات",cat:"تكنولوجيا"},
+  {word:"تيك توك",hint:"فيديوهات قصيرة",cat:"تكنولوجيا"},{word:"انستقرام",hint:"منصة صور",cat:"تكنولوجيا"},{word:"بلايستيشن",hint:"جهاز ألعاب",cat:"تكنولوجيا"},
+  {word:"جوجل",hint:"محرك بحث",cat:"تكنولوجيا"},{word:"سامسونج",hint:"شركة كورية",cat:"تكنولوجيا"},{word:"نتفلكس",hint:"منصة أفلام",cat:"تكنولوجيا"},
+  {word:"رونالدو",hint:"الدون",cat:"رياضة"},{word:"ميسي",hint:"الأفضل أرجنتيني",cat:"رياضة"},{word:"نيمار",hint:"برازيلي مشهور",cat:"رياضة"},
+  {word:"بنزيما",hint:"فرنسي في الاتحاد",cat:"رياضة"},{word:"محمد صلاح",hint:"فرعون ليفربول",cat:"رياضة"},{word:"مبابي",hint:"فرنسي سريع",cat:"رياضة"},
+  {word:"الهلال",hint:"نادي سعودي أزرق",cat:"رياضة"},{word:"النصر",hint:"نادي سعودي أصفر",cat:"رياضة"},{word:"الاهلي",hint:"نادي سعودي أخضر",cat:"رياضة"},
+  {word:"ريال مدريد",hint:"النادي الملكي",cat:"رياضة"},{word:"برشلونة",hint:"نادي كتالوني",cat:"رياضة"},{word:"ليفربول",hint:"نادي إنجليزي أحمر",cat:"رياضة"},
+  {word:"تويوتا",hint:"سيارات يابانية",cat:"سيارات"},{word:"مرسيدس",hint:"النجمة الثلاثية",cat:"سيارات"},{word:"فيراري",hint:"حصان إيطالي",cat:"سيارات"},
+  {word:"لامبورغيني",hint:"سيارة خارقة",cat:"سيارات"},{word:"بورش",hint:"سيارة ألمانية رياضية",cat:"سيارات"},{word:"تسلا",hint:"سيارة كهربائية",cat:"سيارات"},
+  {word:"رولز رويس",hint:"سيارة الملوك",cat:"سيارات"},{word:"بنتلي",hint:"فخامة بريطانية",cat:"سيارات"},{word:"لكزس",hint:"فخامة يابانية",cat:"سيارات"},
+  {word:"نايكي",hint:"ماركة رياضية",cat:"ماركات"},{word:"اديداس",hint:"ثلاث خطوط",cat:"ماركات"},{word:"شانيل",hint:"أزياء فرنسية",cat:"ماركات"},
+  {word:"قوتشي",hint:"ماركة إيطالية",cat:"ماركات"},{word:"ستاربكس",hint:"قهوة أمريكية",cat:"ماركات"},{word:"ابل",hint:"شركة التفاحة",cat:"ماركات"},
+  {word:"اكسجين",hint:"غاز نتنفسه",cat:"علوم"},{word:"جاذبية",hint:"قوة تشد للأرض",cat:"علوم"},{word:"بركان",hint:"جبل يقذف حمم",cat:"علوم"},
+  {word:"ديناصور",hint:"منقرض وعملاق",cat:"علوم"},{word:"مجرة",hint:"تجمع نجوم هائل",cat:"علوم"},{word:"كهرباء",hint:"طاقة تضيء",cat:"علوم"},
+  {word:"قهوة",hint:"مشروب الصباح",cat:"متنوع"},{word:"شوكولاتة",hint:"حلوى بنية",cat:"متنوع"},{word:"سينما",hint:"مشاهدة أفلام",cat:"متنوع"},
+  {word:"مطار",hint:"تقلع منه الطائرات",cat:"متنوع"},{word:"رمضان",hint:"شهر الصيام",cat:"متنوع"},{word:"كرة القدم",hint:"اللعبة الشعبية",cat:"متنوع"},
+  {word:"طائرة",hint:"تطير بالسماء",cat:"متنوع"},{word:"مستشفى",hint:"مكان العلاج",cat:"متنوع"},{word:"جامعة",hint:"مكان الدراسة",cat:"متنوع"},
+  {word:"خريطة",hint:"ترسم الأماكن",cat:"متنوع"},{word:"انترنت",hint:"شبكة عالمية",cat:"متنوع"},{word:"كمبيوتر",hint:"آلة ذكية",cat:"متنوع"},
+];
+
+let usedWordsSet = new Set();
+let autoMode = false;
+let autoTimer = null;
+
+// Build category filter
+const cats = [...new Set(WORD_BANK.map(w => w.cat))];
+const catSelect = document.getElementById('category-filter');
+cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; catSelect.appendChild(o); });
+
+function updateWordStats() {
+  document.getElementById('meta-bank').textContent = WORD_BANK.length;
+  document.getElementById('meta-used').textContent = usedWordsSet.size;
+}
+updateWordStats();
+
+/* Letter boxes preview */
+function renderWordLetters() {
+  const word = document.getElementById('word-input').value.trim();
+  const box = document.getElementById('fh-word');
+  if (!word) {
+    box.innerHTML = '<div class="fh-word-empty">اكتب كلمة تحت أو اضغط 🎲 كلمة عشوائية</div>';
+    return;
+  }
+  box.innerHTML = [...word].map(ch =>
+    ch === ' ' ? '<div class="fh-letter space"></div>' : '<div class="fh-letter">' + escHtml(ch) + '</div>'
+  ).join('');
+}
+function renderHintLine() {
+  const hint = document.getElementById('hint-input').value.trim();
+  document.getElementById('fh-hint').innerHTML = hint ? '💡 التلميح: <b>' + escHtml(hint) + '</b>' : '';
+}
+document.getElementById('word-input').addEventListener('input', renderWordLetters);
+document.getElementById('hint-input').addEventListener('input', renderHintLine);
+
+function getFilteredPool() {
+  const cat = document.getElementById('category-filter').value;
+  let pool = WORD_BANK;
+  if (cat !== 'all') pool = pool.filter(w => w.cat === cat);
+  return pool.filter(w => !usedWordsSet.has(w.word));
+}
+
+function randomWord() {
+  let pool = getFilteredPool();
+  if (!pool.length) { usedWordsSet.clear(); pool = getFilteredPool(); }
+  if (!pool.length) return;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  document.getElementById('word-input').value = pick.word;
+  document.getElementById('hint-input').value = pick.hint || '';
+  renderWordLetters();
+  renderHintLine();
+  updateWordStats();
+}
+
+function toggleAuto() {
+  autoMode = !autoMode;
+  const btn = document.getElementById('auto-btn');
+  if (autoMode) {
+    btn.classList.add('on');
+    document.getElementById('auto-ic').textContent = '⏸';
+    document.getElementById('auto-nm').textContent = 'إيقاف الأوتوماتيك';
+    document.getElementById('auto-sub').textContent = 'شغّال الآن';
+    autoNext();
+  } else {
+    btn.classList.remove('on');
+    document.getElementById('auto-ic').textContent = '▶';
+    document.getElementById('auto-nm').textContent = 'أوتوماتيك';
+    document.getElementById('auto-sub').textContent = 'كلمة تلو كلمة';
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+  }
+}
+
+function autoNext() {
+  if (!autoMode) return;
+  randomWord();
+  startGame();
+  const dur = parseInt(document.getElementById('duration-input').value) || 30;
+  autoTimer = setTimeout(() => {
+    if (!autoMode) return;
+    stopGame();
+    setTimeout(() => { if (autoMode) autoNext(); }, 3000);
+  }, dur * 1000);
+}
+
+// ── شروط اللعب ────────────────────────────────────────────
+function getRulesList() {
+  return document.getElementById('rules-text').value.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 8);
+}
+async function showRulesThenStart() {
+  const rules = getRulesList();
+  if (!rules.length || !username) return;
+  if (!document.getElementById('word-input').value.trim()) randomWord();
+  const duration = Math.max(3, Math.min(120, parseInt(document.getElementById('rules-duration').value) || 10));
+  await fetch('/api/rules/show', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, game:'word', title:'شروط خمّن الكلمة', rules, duration }) });
+  setTimeout(() => { if (!gameActive) startGame(); }, duration * 1000 + 400);
+}
+async function hideRules() {
+  await fetch('/api/rules/hide', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) });
+}
+
+if (username) socket.emit('join', { username });
+
+socket.on('word:update', ({ winners: w, active, word }) => {
+  winners = w || [];
+  if (active !== undefined) setActive(active);
+  if (word) { document.getElementById('word-input').value = word; renderWordLetters(); }
+  renderWinners();
+});
+
+socket.on('word:started', ({ word }) => {
+  setActive(true);
+  document.getElementById('word-input').value = word;
+  renderWordLetters();
+});
+
+socket.on('word:stopped', () => setActive(false));
+
+// Load existing
+if (username) {
+  fetch(`/api/word/${username}`).then(r => r.json()).then(data => {
+    winners = data.winners || [];
+    setActive(data.active);
+    if (data.word) {
+      document.getElementById('word-input').value = data.word;
+      renderWordLetters();
+    }
+    renderWinners();
+  });
+}
+
+function setActive(active) {
+  gameActive = active;
+  const badge = document.getElementById('status-badge');
+  badge.classList.toggle('on', active);
+  document.getElementById('status-txt').textContent = active ? 'شغّالة' : 'متوقف';
+  document.getElementById('start-btn').disabled = active;
+  document.getElementById('stop-btn').disabled  = !active;
+}
+
+async function startGame() {
+  const word = document.getElementById('word-input').value.trim();
+  const hint = document.getElementById('hint-input').value.trim();
+  if (!word || !username) return;
+  usedWordsSet.add(word);
+  updateWordStats();
+  renderWordLetters();
+  renderHintLine();
+  await fetch('/api/word/start', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, word, hint }) });
+}
+
+async function stopGame() {
+  await fetch('/api/word/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) });
+}
+
+async function clearWinners() {
+  if (!confirm('مسح قائمة الفائزين؟')) return;
+  await fetch('/api/word/clear', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) });
+}
+
+function renderWinners() {
+  const list = document.getElementById('winners-list');
+  document.getElementById('count').textContent = winners.length;
+  document.getElementById('meta-winners').textContent = winners.length;
+  if (!winners.length) {
+    list.innerHTML = '<div class="empty">في انتظار اللاعبين...<br><small>ابدأ اللعبة وأخبر الجمهور يخمنون الكلمة</small></div>';
+    return;
+  }
+  const rankClass = i => i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+  const rankIcon  = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
+  list.innerHTML = winners.map((w, i) => `
+    <div class="winner-item">
+      <span class="winner-rank ${rankClass(i)}">${rankIcon(i)}</span>
+      <div class="winner-avatar">${w.avatar ? `<img src="${w.avatar}" onerror="this.parentElement.textContent='${escHtml((w.name||'?')[0])}'">` : escHtml((w.name||'?')[0])}</div>
+      <span class="winner-name">${escHtml(w.name)}</span>
+      <span class="winner-count">× ${w.count}</span>
+    </div>`).join('');
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(overlayUrl);
+  const el = document.getElementById('overlay-link');
+  el.style.color = '#22c55e';
+  setTimeout(() => el.style.color = '', 1500);
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+document.getElementById('word-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !gameActive) startGame(); });
+</script>
+</body>
+</html>

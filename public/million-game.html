@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>من سيربح المليون - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root{--bg:#0d0d14;--surface:#181824;--surface2:#242436;--border:#2d2d40;--text:#f0f0f5;--muted:#9a9ab0;--accent:#ff0050;--gold:#ffd700;--green:#1dba72;--red:#ef4444}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;padding:20px;min-height:100vh}
+  .wrap{max-width:850px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--surface);border-radius:12px}
+  .header h1{font-size:22px}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--muted)}
+  .badge.active{background:var(--gold);color:#000}
+  .card{background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--border)}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--gold)}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input,.field select,.field textarea{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+  .opt-input{position:relative}
+  .opt-input input{padding-right:36px}
+  .opt-radio{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;border-radius:50%;border:2px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;transition:all .15s}
+  .opt-radio.selected{background:var(--green);border-color:var(--green);color:#fff}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{padding:11px 16px;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px}
+  .btn-ask{background:var(--gold);color:#000;flex:1}
+  .btn-reveal{background:var(--green);color:#fff;flex:1}
+  .btn-next{background:#a855f7;color:#fff;flex:1}
+  .btn-stop{background:var(--accent);color:#fff;flex:1}
+  .btn-help{background:var(--surface2);border:1px solid var(--border);color:var(--muted);flex:1;font-size:12px}
+  .btn-help.used{opacity:.3;text-decoration:line-through}
+  .q-bank{max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+  .q-item{padding:10px 12px;background:var(--surface2);border-radius:8px;cursor:pointer;transition:all .15s;border:1px solid transparent}
+  .q-item:hover{border-color:var(--gold);background:rgba(255,215,0,.04)}
+  .q-item.used{opacity:.25}
+  .q-item-text{font-size:13px;font-weight:700;margin-bottom:4px}
+  .q-item-opts{font-size:11px;color:var(--muted)}
+  .q-item-correct{color:var(--green);font-size:11px;font-weight:700}
+  .lb-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:4px;font-size:13px}
+  .lb-rank{font-size:16px;width:24px;text-align:center}
+  .lb-name{flex:1;font-weight:700}
+  .lb-score{color:var(--gold);font-weight:900}
+  .empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
+  .overlay-link{background:var(--surface2);padding:10px;border-radius:8px;font-family:monospace;font-size:12px;word-break:break-all;cursor:pointer}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tab{padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit;color:var(--muted)}
+  .tab.active{background:var(--gold);color:#000;border-color:var(--gold)}
+  .cat-filter{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+  .cat-tag{padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px;color:var(--muted);font-family:inherit}
+  .cat-tag.active{background:rgba(255,215,0,.1);border-color:var(--gold);color:var(--gold)}
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>💰 من سيربح المليون</h1>
+    <span class="badge" id="status-badge">متوقف</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚙️ الإعدادات</div>
+    <div class="row2">
+      <div class="field"><label>وقت الإجابة (ثواني)</label><input type="number" id="answer-time" value="15" min="5" max="60"></div>
+      <div class="field"><label>الفئة</label>
+        <select id="cat-filter"><option value="all">الكل</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('bank')">🗂️ بنك الأسئلة</button>
+      <button class="tab" onclick="switchTab('custom')">✏️ سؤال مخصص</button>
+    </div>
+    <div id="tab-bank">
+      <div class="card-title">🗂️ بنك الأسئلة (<span id="q-count">0</span>)</div>
+      <div class="q-bank" id="q-bank"></div>
+    </div>
+    <div id="tab-custom" style="display:none">
+      <div class="card-title">✏️ سؤال مخصص</div>
+      <div class="field"><label>السؤال</label><input type="text" id="custom-q" placeholder="اكتب السؤال..."></div>
+      <div class="row2">
+        <div class="opt-input field"><label>1</label><input type="text" id="opt-1" placeholder="الخيار الأول"><div class="opt-radio selected" id="r-1" onclick="setCorrect(1)">✓</div></div>
+        <div class="opt-input field"><label>2</label><input type="text" id="opt-2" placeholder="الخيار الثاني"><div class="opt-radio" id="r-2" onclick="setCorrect(2)">✓</div></div>
+      </div>
+      <div class="row2">
+        <div class="opt-input field"><label>3</label><input type="text" id="opt-3" placeholder="الخيار الثالث"><div class="opt-radio" id="r-3" onclick="setCorrect(3)">✓</div></div>
+        <div class="opt-input field"><label>4</label><input type="text" id="opt-4" placeholder="الخيار الرابع"><div class="opt-radio" id="r-4" onclick="setCorrect(4)">✓</div></div>
+      </div>
+      <button class="btn btn-ask" onclick="askCustom()" style="width:100%">▶ اطرح السؤال</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎮 التحكم</div>
+    <div class="actions" style="margin-bottom:10px">
+      <button class="btn btn-next" onclick="nextFromBank()">⏭ سؤال عشوائي</button>
+      <button class="btn btn-reveal" onclick="revealAnswer()">🔓 اكشف الإجابة</button>
+      <button class="btn btn-stop" onclick="stopGame()">⏹ إيقاف</button>
+    </div>
+    <div class="actions">
+      <button class="btn btn-help" id="h-remove2" onclick="useHelp('remove2')">✂️ حذف إجابتين</button>
+      <button class="btn btn-help" id="h-audience" onclick="useHelp('audience')">👥 تصويت الجمهور</button>
+      <button class="btn btn-help" id="h-change" onclick="useHelp('change')">🔄 تغيير السؤال</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">🏆 المتصدرين</div>
+      <button class="btn" onclick="resetScores()" style="font-size:11px;padding:4px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">مسح</button>
+    </div>
+    <div id="leaderboard"><div class="empty">لا يوجد نتائج بعد</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 رابط الـ Overlay</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="overlay-link" id="overlay-link" style="flex:1">—</div>
+      <button class="btn" onclick="copyLink()" style="background:var(--gold);color:#000;padding:10px 16px;font-size:13px">📋 نسخ</button>
+    </div>
+  </div>
+</div>
+<script>
+var QUESTIONS = [
+  {q:"ما عاصمة السعودية؟",opts:["جدة","الرياض","مكة","المدينة"],correct:2,cat:"جغرافيا"},
+  {q:"كم عدد أركان الإسلام؟",opts:["3","4","5","6"],correct:3,cat:"دين"},
+  {q:"ما أكبر كوكب في المجموعة الشمسية؟",opts:["زحل","المشتري","أورانوس","نبتون"],correct:2,cat:"علوم"},
+  {q:"من مخترع المصباح الكهربائي؟",opts:["نيوتن","أديسون","أينشتاين","تسلا"],correct:2,cat:"تاريخ"},
+  {q:"ما اللغة الأكثر تحدثاً في العالم؟",opts:["الإنجليزية","العربية","الماندرين","الإسبانية"],correct:3,cat:"ثقافة"},
+  {q:"في أي سنة أقيمت أول كأس عالم؟",opts:["1928","1930","1934","1926"],correct:2,cat:"رياضة"},
+  {q:"ما أطول نهر في العالم؟",opts:["النيل","الأمازون","المسيسيبي","اليانغتسي"],correct:1,cat:"جغرافيا"},
+  {q:"كم عدد ألوان قوس القزح؟",opts:["5","6","7","8"],correct:3,cat:"علوم"},
+  {q:"ما العنصر الكيميائي للماء؟",opts:["CO2","H2O","O2","NaCl"],correct:2,cat:"علوم"},
+  {q:"من بنى الأهرامات؟",opts:["الرومان","الفراعنة","اليونان","الفرس"],correct:2,cat:"تاريخ"},
+  {q:"ما أصغر دولة في العالم؟",opts:["موناكو","الفاتيكان","سان مارينو","مالطا"],correct:2,cat:"جغرافيا"},
+  {q:"كم عدد سور القرآن الكريم؟",opts:["112","114","116","110"],correct:2,cat:"دين"},
+  {q:"ما الغاز الذي نتنفسه؟",opts:["نيتروجين","أكسجين","هيدروجين","كربون"],correct:2,cat:"علوم"},
+  {q:"أين يقع برج إيفل؟",opts:["لندن","روما","باريس","برلين"],correct:3,cat:"جغرافيا"},
+  {q:"ما أسرع حيوان بري؟",opts:["الأسد","النمر","الفهد","الحصان"],correct:3,cat:"حيوانات"},
+  {q:"كم عدد لاعبي فريق كرة القدم؟",opts:["9","10","11","12"],correct:3,cat:"رياضة"},
+  {q:"ما عملة اليابان؟",opts:["يوان","ين","وون","باهت"],correct:2,cat:"ثقافة"},
+  {q:"من رسم لوحة الموناليزا؟",opts:["بيكاسو","دافنشي","مايكل أنجلو","رافائيل"],correct:2,cat:"ثقافة"},
+  {q:"ما أكبر محيط في العالم؟",opts:["الأطلسي","الهندي","الهادئ","المتجمد"],correct:3,cat:"جغرافيا"},
+  {q:"كم عدد أضلاع المثلث؟",opts:["2","3","4","5"],correct:2,cat:"علوم"},
+  {q:"ما الكوكب الأقرب للشمس؟",opts:["الزهرة","عطارد","الأرض","المريخ"],correct:2,cat:"علوم"},
+  {q:"من هو خاتم الأنبياء؟",opts:["عيسى","موسى","محمد ﷺ","إبراهيم"],correct:3,cat:"دين"},
+  {q:"ما أكبر قارة في العالم؟",opts:["أفريقيا","آسيا","أوروبا","أمريكا"],correct:2,cat:"جغرافيا"},
+  {q:"كم سنة في القرن؟",opts:["50","100","200","1000"],correct:2,cat:"ثقافة"},
+  {q:"ما الحيوان الذي يُلقب بسفينة الصحراء؟",opts:["الحصان","الحمار","الجمل","البغل"],correct:3,cat:"حيوانات"},
+  {q:"أي دولة استضافت كأس العالم 2022؟",opts:["السعودية","الإمارات","قطر","البحرين"],correct:3,cat:"رياضة"},
+  {q:"ما أصلب مادة طبيعية؟",opts:["الحديد","الذهب","الألماس","الصخر"],correct:3,cat:"علوم"},
+  {q:"كم عدد أيام السنة الميلادية؟",opts:["360","364","365","366"],correct:3,cat:"ثقافة"},
+  {q:"ما أكبر حيوان على وجه الأرض؟",opts:["الفيل","الحوت الأزرق","الزرافة","الديناصور"],correct:2,cat:"حيوانات"},
+  {q:"ما لون الشمس الحقيقي؟",opts:["أصفر","أبيض","برتقالي","أحمر"],correct:2,cat:"علوم"},
+  {q:"من أول من مشى على القمر؟",opts:["يوري غاغارين","نيل أرمسترونغ","باز ألدرن","جون غلين"],correct:2,cat:"تاريخ"},
+  {q:"ما عدد حروف اللغة العربية؟",opts:["26","28","30","32"],correct:2,cat:"ثقافة"},
+  {q:"ما أطول حيوان في العالم؟",opts:["الفيل","الحوت","الزرافة","التمساح"],correct:3,cat:"حيوانات"},
+  {q:"كم عين للنحلة؟",opts:["2","3","5","4"],correct:3,cat:"حيوانات"},
+  {q:"ما أول دولة عربية فازت بكأس أمم أفريقيا؟",opts:["المغرب","تونس","الجزائر","مصر"],correct:4,cat:"رياضة"},
+  {q:"ما الحيوان الوحيد الذي ينام مفتوح العينين؟",opts:["الدولفين","الأسد","السمكة","الثعبان"],correct:3,cat:"حيوانات"},
+];
+
+var params = new URLSearchParams(location.search);
+var username = params.get('username') || '';
+var socket = io();
+if (username) socket.emit('join', { username });
+
+document.getElementById('overlay-link').textContent = location.origin + '/million-overlay.html?username=' + username;
+function copyLink() {
+  navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);
+  document.getElementById('overlay-link').style.borderColor = '#1dba72';
+  setTimeout(function(){ document.getElementById('overlay-link').style.borderColor = ''; }, 1000);
+}
+
+var questionIndex = 0, usedQs = new Set(), correctAnswer = 1;
+var helps = { remove2: true, audience: true, change: true };
+
+// Build cat filter
+var cats = [...new Set(QUESTIONS.map(q => q.cat))];
+var catSel = document.getElementById('cat-filter');
+cats.forEach(function(c) { var o = document.createElement('option'); o.value = c; o.textContent = c; catSel.appendChild(o); });
+
+function switchTab(t) {
+  document.getElementById('tab-bank').style.display = t==='bank'?'':'none';
+  document.getElementById('tab-custom').style.display = t==='custom'?'':'none';
+  document.querySelectorAll('.tab').forEach(function(el,i){el.classList.toggle('active',i===(t==='bank'?0:1));});
+}
+
+function setCorrect(n) {
+  correctAnswer = n;
+  for (var i = 1; i <= 4; i++) document.getElementById('r-'+i).classList.toggle('selected', i===n);
+}
+
+function renderBank() {
+  var cat = document.getElementById('cat-filter').value;
+  var list = QUESTIONS.map(function(q,i){return{...q,idx:i};});
+  if (cat !== 'all') list = list.filter(function(q){return q.cat===cat;});
+  document.getElementById('q-count').textContent = list.length;
+  document.getElementById('q-bank').innerHTML = list.map(function(q) {
+    return '<div class="q-item '+(usedQs.has(q.idx)?'used':'')+'" onclick="askFromBank('+q.idx+')"><div class="q-item-text">'+esc(q.q)+'</div><div class="q-item-opts">'+q.opts.join(' | ')+'</div><div class="q-item-correct">✓ '+q.opts[q.correct-1]+'</div></div>';
+  }).join('');
+}
+
+async function askFromBank(idx) {
+  var q = QUESTIONS[idx];
+  usedQs.add(idx);
+  await askQuestion(q.q, q.opts, q.correct);
+  renderBank();
+}
+
+async function nextFromBank() {
+  var cat = document.getElementById('cat-filter').value;
+  var pool = QUESTIONS.map(function(q,i){return{...q,idx:i};}).filter(function(q){return !usedQs.has(q.idx);});
+  if (cat !== 'all') pool = pool.filter(function(q){return q.cat===cat;});
+  if (!pool.length) { usedQs.clear(); pool = QUESTIONS.map(function(q,i){return{...q,idx:i};}); }
+  var pick = pool[Math.floor(Math.random()*pool.length)];
+  usedQs.add(pick.idx);
+  await askQuestion(pick.q, pick.opts, pick.correct);
+  renderBank();
+}
+
+async function askCustom() {
+  var q = document.getElementById('custom-q').value.trim();
+  var opts = [document.getElementById('opt-1').value.trim(),document.getElementById('opt-2').value.trim(),document.getElementById('opt-3').value.trim(),document.getElementById('opt-4').value.trim()];
+  if (!q || opts.some(function(o){return !o;})) { alert('أكمل السؤال والخيارات'); return; }
+  await askQuestion(q, opts, correctAnswer);
+}
+
+async function askQuestion(q, opts, correct) {
+  var answerTime = parseInt(document.getElementById('answer-time').value) || 15;
+  await fetch('/api/million/ask', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, question: q, options: opts, correct, answerTime, questionIndex }),
+  });
+  questionIndex++;
+  document.getElementById('status-badge').textContent = '🟢 سؤال ' + questionIndex;
+  document.getElementById('status-badge').classList.add('active');
+}
+
+async function revealAnswer() {
+  await fetch('/api/million/reveal', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+  loadLeaderboard();
+}
+
+async function useHelp(type) {
+  if (!helps[type]) return;
+  await fetch('/api/million/help', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username, type }) });
+  helps[type] = false;
+  document.getElementById('h-'+type.replace('2','')).classList.add('used');
+  if (type === 'change') nextFromBank();
+}
+
+async function stopGame() {
+  await fetch('/api/million/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+  document.getElementById('status-badge').textContent = 'متوقف';
+  document.getElementById('status-badge').classList.remove('active');
+}
+
+async function resetScores() {
+  if (!confirm('مسح النتائج؟')) return;
+  await fetch('/api/million/reset', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+  questionIndex = 0; usedQs.clear(); helps = { remove2:true, audience:true, change:true };
+  ['h-remove2','h-audience','h-change'].forEach(function(id){ document.getElementById(id).classList.remove('used'); });
+  document.getElementById('leaderboard').innerHTML = '<div class="empty">لا يوجد نتائج بعد</div>';
+  renderBank();
+}
+
+async function loadLeaderboard() {
+  var res = await fetch('/api/million/' + username);
+  var data = await res.json();
+  var el = document.getElementById('leaderboard');
+  var list = data.topPlayers || [];
+  if (!list.length) { el.innerHTML = '<div class="empty">لا يوجد نتائج بعد</div>'; return; }
+  var RANKS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  el.innerHTML = list.slice(0,10).map(function(p,i) {
+    return '<div class="lb-item"><span class="lb-rank">'+RANKS[i]+'</span><span class="lb-name">'+esc(p.name)+'</span><span class="lb-score">'+p.totalScore.toLocaleString()+'</span></div>';
+  }).join('');
+}
+
+socket.on('million:reveal', function() { loadLeaderboard(); });
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+document.getElementById('cat-filter').onchange = renderBank;
+renderBank();
+if (username) loadLeaderboard();
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

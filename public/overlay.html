@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: transparent !important;
+    overflow: hidden;
+    width: 100vw; height: 100vh;
+    font-family: 'Tajawal', sans-serif;
+  }
+
+  .feed {
+    position: fixed;
+    bottom: 0;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 100vh;
+    overflow: hidden;
+    width: 460px;
+    max-width: 50vw;
+  }
+  .feed.side-right { right: 0; left: auto; }
+  .feed.side-left  { left: 0;  right: auto; }
+  .feed.side-right .msg, .feed.side-right .gift-pop { margin-right:0; margin-left:auto; }
+  .feed.side-left  .msg, .feed.side-left  .gift-pop { margin-left:0; margin-right:auto; }
+
+  /* Stats bar */
+  .stats-bar {
+    position: fixed;
+    top: 12px;
+    background: rgba(0,0,0,.85);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 14px;
+    padding: 8px 14px;
+    display: flex;
+    gap: 14px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .stats-bar.side-right { right: 12px; }
+  .stats-bar.side-left  { left: 12px; }
+  .stat-item {
+    display: flex; align-items: center; gap: 4px;
+  }
+  .stat-item .val { color: #ffd700; font-weight: 900; }
+  .stat-item.new { animation: pulse .6s ease; }
+  @keyframes pulse {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.15); color:#1dba72; }
+  }
+
+  .msg {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    animation: rise .35s cubic-bezier(.22,1,.36,1);
+    max-width: 420px;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(12px) scale(.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: rgba(255,255,255,.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+  .bubble {
+    background: rgba(0,0,0,.65);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 12px 12px 12px 3px;
+    padding: 6px 11px;
+    max-width: 380px;
+  }
+
+  .user {
+    font-size: 12px; font-weight: 700;
+    color: #25f4ee;
+    margin-bottom: 2px;
+    line-height: 1;
+  }
+  .user.mod { color: #ff0050; }
+
+  .text {
+    font-size: 14px;
+    color: #fff;
+    line-height: 1.4;
+    word-break: break-word;
+    text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 9px; font-weight: 700;
+    padding: 1px 4px; border-radius: 3px;
+    margin-right: 4px; vertical-align: middle;
+    text-transform: uppercase;
+  }
+  .badge.mod { background: rgba(255,0,80,.35); color: #ff0050; }
+  .badge.sub { background: rgba(37,244,238,.25); color: #25f4ee; }
+
+  /* Gift pop */
+  .gift-pop {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,.7);
+    backdrop-filter: blur(6px);
+    border-radius: 20px;
+    padding: 6px 14px 6px 8px;
+    animation: rise .35s cubic-bezier(.22,1,.36,1);
+    max-width: 260px;
+  }
+  .gift-pop .gi { font-size: 22px; }
+  .gift-pop .ginfo { display: flex; flex-direction: column; }
+  .gift-pop .gu { font-size: 12px; font-weight: 700; color: #f59e0b; }
+  .gift-pop .gn { font-size: 11px; color: rgba(255,255,255,.7); }
+</style>
+</head>
+<body>
+<div class="stats-bar" id="stats-bar">
+  <div class="stat-item" id="stat-viewers">👁 <span class="val" id="val-viewers">0</span></div>
+  <div class="stat-item" id="stat-followers">➕ <span class="val" id="val-followers">0</span></div>
+  <div class="stat-item" id="stat-likes">❤️ <span class="val" id="val-likes">0</span></div>
+  <div class="stat-item" id="stat-diamonds">💎 <span class="val" id="val-diamonds">0</span></div>
+</div>
+<div class="feed" id="feed"></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const username = params.get('user') || '';
+const maxMessages = parseInt(params.get('max') || '8');
+const side = (params.get('side') || 'right').toLowerCase();
+const showStats = params.get('stats') !== '0';
+const socket = io();
+
+document.getElementById('feed').classList.add('side-' + side);
+document.getElementById('stats-bar').classList.add('side-' + side);
+if (!showStats) document.getElementById('stats-bar').style.display = 'none';
+
+if (username) socket.emit('join', { username });
+
+socket.on('stats', (stats) => {
+  const setStat = (id, newVal) => {
+    const el = document.getElementById(id);
+    const prev = parseInt(el.textContent) || 0;
+    el.textContent = newVal;
+    if (newVal > prev) {
+      const parent = el.parentElement;
+      parent.classList.add('new');
+      setTimeout(() => parent.classList.remove('new'), 700);
+    }
+  };
+  setStat('val-viewers',   stats.viewers   || 0);
+  setStat('val-followers', stats.followers || 0);
+  setStat('val-likes',     stats.likes     || 0);
+  setStat('val-diamonds',  stats.diamonds  || 0);
+});
+
+const feed = document.getElementById('feed');
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function addEl(el) {
+  feed.appendChild(el);
+  while (feed.children.length > maxMessages) feed.removeChild(feed.firstChild);
+}
+
+socket.on('chat', ({ user, avatar, comment, isModerator, isSubscriber }) => {
+  const div = document.createElement('div');
+  div.className = 'msg';
+
+  const avHTML = avatar
+    ? `<img src="${esc(avatar)}" onerror="this.parentElement.textContent='${esc((user||'?')[0].toUpperCase())}'">` 
+    : esc((user||'?')[0].toUpperCase());
+
+  const badges = (isModerator ? '<span class="badge mod">مشرف</span>' : '') +
+                 (isSubscriber ? '<span class="badge sub">مشترك</span>' : '');
+
+  div.innerHTML = `
+    <div class="avatar">${avHTML}</div>
+    <div class="bubble">
+      <div class="user${isModerator?' mod':''}">${badges}${esc(user)}</div>
+      <div class="text">${esc(comment)}</div>
+    </div>`;
+  addEl(div);
+});
+
+socket.on('gift', ({ user, giftName, repeatCount }) => {
+  const div = document.createElement('div');
+  div.className = 'gift-pop';
+  div.innerHTML = `
+    <span class="gi">🎁</span>
+    <div class="ginfo">
+      <span class="gu">${esc(user)}</span>
+      <span class="gn">${esc(giftName)} x${repeatCount}</span>
+    </div>`;
+  addEl(div);
+  setTimeout(() => { if (div.parentElement) div.remove(); }, 6000);
+});
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

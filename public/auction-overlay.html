@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auction Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.main{position:relative;background:rgba(0,0,0,.92);border:2px solid rgba(251,191,36,.4);border-radius:22px;padding:24px 28px;width:520px;opacity:0;transition:opacity .15s;overflow:hidden}
+.main.show{opacity:1}
+.main::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#fbbf24,#f59e0b,#fbbf24)}
+
+.title{font-size:15px;color:rgba(255,255,255,.4);text-align:center;margin-bottom:6px}
+.title span{color:#fbbf24;font-weight:900}
+
+.word-box{text-align:center;padding:16px;margin-bottom:12px;background:rgba(251,191,36,.06);border:1.5px solid rgba(251,191,36,.2);border-radius:16px}
+.word-text{font-size:32px;font-weight:900;color:#fff}
+.word-hint{font-size:13px;color:rgba(255,255,255,.4);margin-top:4px}
+
+.instruction{text-align:center;font-size:14px;color:#fbbf24;font-weight:700;margin-bottom:12px;animation:pulse 1.5s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+.timer-bar{height:6px;background:rgba(255,255,255,.06);border-radius:3px;margin-bottom:14px;overflow:hidden}
+.timer-fill{height:100%;background:linear-gradient(90deg,#fbbf24,#f59e0b);border-radius:3px;transition:width .15s linear}
+.timer-fill.warn{background:linear-gradient(90deg,#ef4444,#f59e0b)}
+
+.leaderboard{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.bid-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;transition:all .3s}
+.bid-item:nth-child(1){background:rgba(255,215,0,.12);border:1.5px solid rgba(255,215,0,.3)}
+.bid-item:nth-child(2){background:rgba(192,192,192,.08);border:1px solid rgba(192,192,192,.2)}
+.bid-item:nth-child(3){background:rgba(205,127,50,.08);border:1px solid rgba(205,127,50,.2)}
+.bid-item:nth-child(n+4){background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06)}
+.bid-rank{font-size:18px;width:24px;text-align:center;flex-shrink:0}
+.bid-avatar{width:28px;height:28px;border-radius:50%;overflow:hidden;flex-shrink:0;border:2px solid rgba(255,255,255,.1)}
+.bid-avatar img{width:100%;height:100%;object-fit:cover}
+.bid-name{flex:1;font-size:14px;font-weight:700;color:#fff}
+.bid-likes{font-size:16px;font-weight:900;color:#fbbf24;display:flex;align-items:center;gap:4px}
+.bid-likes-icon{font-size:14px}
+
+.stats-row{text-align:center;font-size:12px;color:rgba(255,255,255,.3)}
+
+.winner-overlay{position:absolute;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(12px);display:none;flex-direction:column;align-items:center;justify-content:center;border-radius:22px;z-index:10}
+.winner-overlay.show{display:flex;animation:fadeIn .5s ease}
+.winner-icon{font-size:56px;margin-bottom:8px}
+.winner-word{font-size:18px;color:rgba(255,255,255,.4);margin-bottom:4px}
+.winner-name{font-size:28px;font-weight:900;color:#ffd700;margin-bottom:4px}
+.winner-likes{font-size:16px;color:#fbbf24}
+@keyframes fadeIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+
+.confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+</style>
+</head>
+<body>
+<div class="main" id="box">
+  <div class="title">💬 <span>مزاد الكلمات</span></div>
+  <div class="word-box">
+    <div class="word-text" id="word-text">—</div>
+    <div class="word-hint" id="word-hint"></div>
+  </div>
+  <div class="instruction">❤️ اضغط لايك عشان تفوز بالكلمة!</div>
+  <div class="timer-bar"><div class="timer-fill" id="timer-fill" style="width:100%"></div></div>
+  <div class="leaderboard" id="leaderboard"></div>
+  <div class="stats-row" id="stats-row"></div>
+  <div class="winner-overlay" id="winner-overlay">
+    <div class="winner-icon">🏆</div>
+    <div class="winner-word" id="w-word"></div>
+    <div class="winner-name" id="w-name"></div>
+    <div class="winner-likes" id="w-likes"></div>
+  </div>
+  <div class="confetti" id="confetti"></div>
+</div>
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();if(username)socket.emit('join',{username});
+var timerInt=null;
+var RANKS=['🥇','🥈','🥉','4️⃣','5️⃣'];
+var COLORS=['#fbbf24','#ffd700','#22c55e','#3b82f6','#a855f7','#ec4899'];
+
+socket.on('auction:start',function(d){
+  document.getElementById('box').classList.add('show');
+  document.getElementById('winner-overlay').classList.remove('show');
+  document.getElementById('word-text').textContent=d.word;
+  document.getElementById('word-hint').textContent=d.hint?'💡 '+d.hint:'';
+  document.getElementById('leaderboard').innerHTML='';
+  document.getElementById('stats-row').textContent='';
+  var fill=document.getElementById('timer-fill');
+  fill.style.width='100%';fill.classList.remove('warn');
+  var total=d.answerTime*1000,start=Date.now();
+  if(timerInt)clearInterval(timerInt);
+  timerInt=setInterval(function(){
+    var pct=Math.max(0,100-(Date.now()-start)/total*100);
+    fill.style.width=pct+'%';
+    if(pct<25)fill.classList.add('warn');
+    if(pct<=0){clearInterval(timerInt);timerInt=null;}
+  },50);
+});
+
+socket.on('auction:bid',function(d){
+  document.getElementById('stats-row').textContent=d.totalBids+' شخص يتنافسون';
+  var el=document.getElementById('leaderboard');
+  el.innerHTML=(d.top5||[]).map(function(b,i){
+    var avHtml=b.avatar?'<div class="bid-avatar"><img src="'+b.avatar+'"></div>':'';
+    return '<div class="bid-item">'+
+      '<span class="bid-rank">'+(RANKS[i]||i+1)+'</span>'+
+      avHtml+
+      '<span class="bid-name">'+esc(b.name)+'</span>'+
+      '<span class="bid-likes"><span class="bid-likes-icon">❤️</span>'+b.likes+'</span>'+
+    '</div>';
+  }).join('');
+});
+
+socket.on('auction:end',function(d){
+  if(timerInt){clearInterval(timerInt);timerInt=null;}
+  if(d.winner){
+    document.getElementById('w-word').textContent='الكلمة: '+d.word;
+    document.getElementById('w-name').textContent=d.winner.name;
+    document.getElementById('w-likes').textContent='❤️ '+d.winner.likes+' لايك';
+    document.getElementById('winner-overlay').classList.add('show');
+    fireConfetti();
+  }
+});
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fireConfetti(){var layer=document.getElementById('confetti'),box=document.getElementById('box'),cx=box.offsetWidth/2,cy=box.offsetHeight/2;for(var i=0;i<40;i++){var p=document.createElement('div');p.style.cssText='position:absolute;width:7px;height:11px;left:'+cx+'px;top:'+cy+'px;background:'+COLORS[i%COLORS.length]+';border-radius:2px;';layer.appendChild(p);var a=Math.random()*Math.PI*2,d=80+Math.random()*220;p.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:'translate('+Math.cos(a)*d+'px,'+Math.sin(a)*d+'px) rotate('+(600+Math.random()*600)+'deg)',opacity:0}],{duration:1400+Math.random()*500,easing:'cubic-bezier(0.4,0,0.6,1)'});setTimeout(function(el){el.remove()}.bind(null,p),2000);}}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

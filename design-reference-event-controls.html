@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحات تحكم الفعاليات — نماذج التصميم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06060b;--bg2:#0a0a14;--card:#0c0c16;--card2:#10101e;--card3:#161628;--border:#1c1c2e;
+  --accent:#0891b2;--accent2:#22d3ee;--gold:#f5c542;
+  --text:#e8eaf2;--muted:#8a8fa3;
+  --green:#22c55e;--red:#ef4444;--purple:#a855f7;--orange:#f97316;--blue:#3b82f6
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;min-height:100vh;padding:18px 12px 60px}
+
+header{text-align:center;margin-bottom:20px}
+header h1{font-size:1.4rem;font-weight:900;background:linear-gradient(90deg,var(--orange),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+header p{color:var(--muted);font-size:.82rem;margin-top:4px}
+
+.tabs{display:flex;gap:7px;justify-content:center;margin-bottom:20px;flex-wrap:wrap}
+.tab{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:9px 15px;border-radius:30px;font-family:inherit;font-size:.85rem;font-weight:900;cursor:pointer;transition:.25s}
+.tab.active{color:#fff;border-color:var(--orange);box-shadow:0 0 14px rgba(249,115,22,.4)}
+.panel{display:none}
+.panel.active{display:block}
+
+/* Common UI bits */
+.status-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:.7rem;font-weight:900}
+.status-badge.live{background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);color:#86efac}
+.status-badge.pause{background:rgba(245,197,66,.13);border:1px solid rgba(245,197,66,.4);color:#fde68a}
+.status-badge.off{background:rgba(125,125,125,.1);border:1px solid #444;color:#999}
+.status-badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.status-badge.live .dot{animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.4}}
+
+.btn{font-family:inherit;font-weight:900;border:none;border-radius:12px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:active{transform:scale(.95)}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;padding:10px 20px;font-size:.88rem;box-shadow:0 4px 18px rgba(8,145,178,.35)}
+.btn-success{background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;padding:10px 20px;font-size:.88rem;box-shadow:0 4px 18px rgba(34,197,94,.35)}
+.btn-danger{background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;padding:10px 20px;font-size:.88rem;box-shadow:0 4px 18px rgba(239,68,68,.35)}
+.btn-warn{background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;padding:10px 20px;font-size:.88rem}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text);padding:9px 16px;font-size:.82rem}
+.btn-ghost:hover{border-color:var(--accent2);color:var(--accent2)}
+.btn-sm{padding:6px 12px;font-size:.75rem;border-radius:9px}
+
+.input,.select{background:var(--card3);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:10px;font-family:inherit;font-size:.82rem;outline:none;transition:.2s;width:100%}
+.input:focus,.select:focus{border-color:var(--accent2);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.field-label{display:block;font-size:.74rem;color:var(--muted);font-weight:700;margin-bottom:5px}
+
+.toggle{width:36px;height:21px;border-radius:30px;background:#2a2a44;position:relative;cursor:pointer;transition:.25s;flex-shrink:0}
+.toggle::after{content:"";position:absolute;top:2px;right:2px;width:17px;height:17px;border-radius:50%;background:#fff;transition:.25s}
+.toggle.on{background:var(--green)}
+.toggle.on::after{right:17px}
+
+/* ============================================================ */
+/* 1) Split View — العجلة                                       */
+/* ============================================================ */
+.split{display:grid;grid-template-columns:1fr 380px;gap:14px;max-width:1280px;margin:0 auto}
+
+.split-main{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px}
+.sm-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.sm-title{display:flex;align-items:center;gap:10px}
+.sm-icon{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:1.3rem}
+.sm-title h2{font-size:1.05rem;font-weight:900}
+.sm-title p{font-size:.74rem;color:var(--muted)}
+
+.settings-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:18px}
+.setting{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px}
+.s-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.s-title{font-weight:900;font-size:.84rem;display:flex;align-items:center;gap:6px}
+.s-hint{font-size:.68rem;color:var(--muted)}
+
+.slot-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto}
+.slot{display:flex;align-items:center;gap:8px;background:var(--card3);border:1px solid var(--border);border-radius:9px;padding:6px 10px;font-size:.78rem}
+.slot .num{font-size:.62rem;color:var(--muted);width:18px}
+.slot input{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:inherit;font-size:.78rem;font-weight:700}
+.slot .x{color:#ef4444;cursor:pointer;font-size:.85rem;opacity:.7}
+.slot .x:hover{opacity:1}
+.add-slot{background:transparent;border:1px dashed var(--border);color:var(--muted);padding:7px;border-radius:9px;font-family:inherit;font-size:.74rem;cursor:pointer;font-weight:700}
+.add-slot:hover{border-color:var(--accent2);color:var(--accent2)}
+
+.action-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+
+/* Preview side */
+.split-side{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;height:fit-content;position:sticky;top:14px}
+.ss-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.ss-head h3{font-size:.9rem;font-weight:900}
+.preview-frame{aspect-ratio:16/9;background:radial-gradient(ellipse at center,#0c2440 0%,#06060b 70%);border-radius:12px;border:1px solid var(--border);position:relative;overflow:hidden;margin-bottom:14px}
+.preview-frame::before{content:"OBS PREVIEW";position:absolute;top:6px;right:8px;font-size:.55rem;color:rgba(255,255,255,.3);font-weight:900;letter-spacing:1px;z-index:2}
+.mini-wheel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:65%;aspect-ratio:1;border-radius:50%;background:conic-gradient(from 0deg,#0891b2 0deg 60deg,#a855f7 60deg 120deg,#f5c542 120deg 180deg,#22c55e 180deg 240deg,#dc2626 240deg 300deg,#3b82f6 300deg 360deg);border:5px solid var(--gold);box-shadow:0 0 25px rgba(245,197,66,.4),0 0 0 6px #06060b;animation:spinSlow 18s linear infinite}
+@keyframes spinSlow{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.mini-wheel::after{content:"🎡";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30%;height:30%;background:#06060b;border:2px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2rem;animation:spinSlow 18s linear infinite reverse}
+
+.preview-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pm-item{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+.pm-label{font-size:.66rem;color:var(--muted);font-weight:700}
+.pm-value{font-size:.85rem;font-weight:900;margin-top:1px}
+
+.obs-link{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:.7rem;color:var(--accent2);margin-top:10px;display:flex;align-items:center;gap:8px;font-family:monospace}
+.obs-link b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ============================================================ */
+/* 2) Vertical Wizard — بطولة الخروج                           */
+/* ============================================================ */
+.wizard{max-width:760px;margin:0 auto}
+.wiz-progress{display:flex;align-items:center;gap:0;margin-bottom:24px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:14px 16px}
+.wstep{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;cursor:pointer}
+.wstep .wnum{width:32px;height:32px;border-radius:50%;background:var(--card2);border:2px solid var(--border);color:var(--muted);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.85rem;transition:.3s;z-index:2}
+.wstep .wlabel{font-size:.72rem;font-weight:900;color:var(--muted)}
+.wstep.done .wnum{background:var(--green);border-color:var(--green);color:#fff}
+.wstep.done .wlabel{color:#86efac}
+.wstep.active .wnum{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:var(--accent2);color:#fff;box-shadow:0 0 18px rgba(34,211,238,.4)}
+.wstep.active .wlabel{color:var(--accent2)}
+.wline{flex:0 0 60px;height:2px;background:var(--border);position:relative;top:-12px}
+.wline.done{background:var(--green)}
+
+.wiz-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px;margin-bottom:14px}
+.wiz-card h3{font-size:1.05rem;font-weight:900;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.wiz-card .wd{font-size:.78rem;color:var(--muted);margin-bottom:18px}
+
+.wiz-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+
+.q-bank{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto}
+.q-item{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.q-item .qn{background:var(--card3);color:var(--muted);width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.7rem;flex-shrink:0}
+.q-item .qt{flex:1;font-size:.82rem;font-weight:700}
+.q-item .qcat{font-size:.66rem;color:var(--muted);background:#1a1a2c;padding:2px 8px;border-radius:6px}
+.q-item .qedit{color:var(--muted);cursor:pointer;font-size:.85rem}
+.q-item .qedit:hover{color:var(--accent2)}
+
+.wiz-actions{display:flex;justify-content:space-between;align-items:center;padding-top:18px;border-top:1px solid var(--border)}
+.wiz-back{color:var(--muted)}
+
+/* ============================================================ */
+/* 3) Command Center — حرب الكلمات                              */
+/* ============================================================ */
+.cc{max-width:1300px;margin:0 auto;display:grid;grid-template-columns:280px 1fr 300px;gap:12px}
+.cc-col{display:flex;flex-direction:column;gap:12px}
+
+.cc-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;position:relative}
+.cc-card h4{font-size:.78rem;font-weight:900;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:6px;letter-spacing:.5px;text-transform:uppercase}
+.cc-card h4 .badge{margin-right:auto;background:rgba(239,68,68,.15);color:#fca5a5;padding:1px 7px;border-radius:8px;font-size:.6rem;font-weight:900;text-transform:none;letter-spacing:0}
+
+/* Big screens — middle column */
+.cc-screens{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cc-screen{background:radial-gradient(ellipse at 20% 0%,rgba(34,211,238,.1),transparent 60%),#0a0612;border:1px solid var(--border);border-radius:14px;padding:14px;position:relative;aspect-ratio:16/10;overflow:hidden}
+.cc-screen.r{background:radial-gradient(ellipse at 20% 0%,rgba(239,68,68,.15),transparent 60%),radial-gradient(ellipse at 80% 100%,rgba(245,197,66,.08),transparent 60%),#0a0612}
+.cc-screen .sn{font-size:.62rem;color:var(--muted);font-weight:900;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.team-name{font-weight:900;font-size:.95rem;margin-bottom:4px}
+.team-hp{height:14px;background:#1a1a2c;border-radius:8px;overflow:hidden;border:1px solid #2a2a44;margin-bottom:8px}
+.team-hp i{display:block;height:100%;background:linear-gradient(90deg,#3b82f6,#22d3ee);transition:.5s}
+.cc-screen.red .team-hp i{background:linear-gradient(90deg,#ef4444,#f97316)}
+.team-stats{display:flex;gap:6px;flex-wrap:wrap;font-size:.7rem;color:var(--muted);margin-bottom:8px}
+.team-stats b{color:#fff}
+.team-words{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.tw{background:rgba(255,255,255,.05);border:1px solid #2a2a44;border-radius:6px;padding:2px 7px;font-size:.68rem;font-weight:900}
+
+.live-meter{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.lm-val{font-size:1.7rem;font-weight:900}
+.lm-label{font-size:.66rem;color:var(--muted)}
+
+.main-action-bar{display:flex;gap:8px;justify-content:center;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:14px}
+.main-action-bar .btn{flex:1;max-width:180px}
+
+/* Players list */
+.players-list{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto}
+.player-row{display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:6px 8px;font-size:.74rem}
+.player-row .pav{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.7rem;flex-shrink:0}
+.player-row .pn{flex:1;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-row .pt{font-size:.62rem;padding:1px 6px;border-radius:5px;font-weight:900}
+.player-row .pt.b{background:rgba(59,130,246,.15);color:#93c5fd}
+.player-row .pt.r{background:rgba(239,68,68,.15);color:#fca5a5}
+.player-row .pscore{font-weight:900;color:var(--gold);font-size:.72rem}
+
+/* Activity log */
+.log{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow-y:auto;font-size:.72rem}
+.log-item{display:flex;gap:6px;padding:6px 8px;background:var(--card2);border:1px solid var(--border);border-radius:8px;line-height:1.4;animation:slideIn .3s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-4px)}to{opacity:1}}
+.log-item .lt{font-size:.6rem;color:var(--muted);flex-shrink:0}
+.log-item.success{border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.05)}
+.log-item.warn{border-color:rgba(245,197,66,.25);background:rgba(245,197,66,.04)}
+
+/* Quick row */
+.cc-controls{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
+.cc-row{display:flex;gap:8px;margin-bottom:8px}
+.cc-row:last-child{margin-bottom:0}
+.cc-mini-btn{flex:1;background:var(--card2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:9px;font-family:inherit;font-weight:900;font-size:.74rem;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.cc-mini-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.cc-mini-btn .mi{font-size:1rem}
+
+/* ============================================================ */
+/* 4) Floating Hub — خمن الكلمة                                 */
+/* ============================================================ */
+.fh{max-width:780px;margin:0 auto;position:relative}
+
+.fh-hero{background:linear-gradient(145deg,var(--card),#1c1145);border:1px solid var(--border);border-radius:22px;padding:30px;text-align:center;position:relative;overflow:hidden;margin-bottom:14px}
+.fh-hero::before{content:"";position:absolute;top:-100px;right:-100px;width:300px;height:300px;background:radial-gradient(circle,rgba(168,85,247,.25),transparent 65%);pointer-events:none}
+.fh-hero::after{content:"";position:absolute;bottom:-80px;left:-80px;width:220px;height:220px;background:radial-gradient(circle,rgba(34,211,238,.18),transparent 65%);pointer-events:none}
+.fh-icon{font-size:3rem;margin-bottom:6px;filter:drop-shadow(0 0 22px rgba(168,85,247,.6));position:relative}
+.fh-title{font-size:1.6rem;font-weight:900;margin-bottom:4px;position:relative}
+.fh-status{display:inline-flex;align-items:center;gap:7px;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);color:#86efac;padding:5px 14px;border-radius:30px;font-weight:900;font-size:.8rem;margin-top:6px;position:relative}
+.fh-status .dot{width:7px;height:7px;border-radius:50%;background:#22c55e;animation:pulse 1.4s infinite}
+
+.fh-word{display:flex;justify-content:center;gap:8px;margin:22px 0 6px;position:relative}
+.fh-letter{width:54px;height:64px;background:#0c0c16cc;backdrop-filter:blur(10px);border:2px solid rgba(168,85,247,.4);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:900;color:#d8b4fe;box-shadow:0 0 20px rgba(168,85,247,.2)}
+.fh-letter.r{color:#fff;border-color:var(--purple);background:linear-gradient(135deg,var(--purple),#6d28d9);box-shadow:0 0 25px rgba(168,85,247,.5)}
+.fh-hint{font-size:.85rem;color:var(--muted);position:relative;margin-bottom:8px}
+.fh-hint b{color:var(--gold)}
+
+.fh-meta{display:flex;justify-content:center;gap:18px;margin-top:16px;position:relative}
+.fhm{text-align:center}
+.fhm b{display:block;font-size:1.5rem;font-weight:900;color:#fff}
+.fhm span{font-size:.66rem;color:var(--muted)}
+
+/* FAB cluster */
+.fh-fab-main{
+  position:relative;width:80px;height:80px;border-radius:50%;
+  background:linear-gradient(135deg,var(--purple),var(--accent2));
+  border:none;color:#fff;font-size:2rem;cursor:pointer;
+  box-shadow:0 10px 30px rgba(168,85,247,.5);margin:0 auto;
+  display:flex;align-items:center;justify-content:center;
+  transition:.3s
+}
+.fh-fab-main:hover{transform:translateY(-3px);box-shadow:0 14px 40px rgba(168,85,247,.6)}
+
+.fh-quick{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+.fhq{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px 8px;cursor:pointer;transition:.2s;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:5px
+}
+.fhq:hover{transform:translateY(-3px);border-color:var(--accent2)}
+.fhq .ic{font-size:1.5rem;filter:drop-shadow(0 0 10px currentColor)}
+.fhq .nm{font-size:.74rem;font-weight:900;color:var(--text)}
+.fhq .sub{font-size:.62rem;color:var(--muted)}
+.fhq.danger:hover{border-color:#ef4444}
+.fhq.danger .ic{color:#ef4444}
+
+/* Drawer */
+.fh-drawer-trigger{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;background:var(--card);border:1px solid var(--border);
+  color:var(--text);padding:12px;border-radius:14px;
+  font-family:inherit;font-weight:900;font-size:.85rem;cursor:pointer;
+  margin-top:14px
+}
+.fh-drawer-trigger:hover{border-color:var(--accent2)}
+.fh-drawer{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  margin-top:10px;overflow:hidden;
+  max-height:0;transition:max-height .35s ease
+}
+.fh-drawer.open{max-height:500px}
+.fh-drawer-inner{padding:16px}
+.fh-drawer-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+
+@media(max-width:1050px){
+  .split{grid-template-columns:1fr}
+  .split-side{position:static}
+  .cc{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .settings-grid{grid-template-columns:1fr}
+  .fh-quick{grid-template-columns:repeat(2,1fr)}
+  .fh-letter{width:42px;height:50px;font-size:1.4rem}
+  .wiz-progress{padding:10px 8px}
+  .wline{flex:0 0 20px}
+  .wstep .wlabel{font-size:.65rem}
+  .cc-screens{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎛️ لوحات تحكم الفعاليات</h1>
+  <p>4 أنماط لتحكم المضيف في الفعالية أثناء البث</p>
+</header>
+
+<div class="tabs">
+  <button class="tab active" data-p="split">🪟 Split View</button>
+  <button class="tab" data-p="wizard">🧭 Vertical Wizard</button>
+  <button class="tab" data-p="cc">🎮 Command Center</button>
+  <button class="tab" data-p="fh">🎈 Floating Hub</button>
+</div>
+
+<!-- ============================================== -->
+<!-- 1) Split View — العجلة                          -->
+<!-- ============================================== -->
+<div class="panel active" id="panel-split">
+  <div class="split">
+
+    <!-- يسار: التحكم -->
+    <div class="split-main">
+      <div class="sm-head">
+        <div class="sm-title">
+          <div class="sm-icon">🎡</div>
+          <div>
+            <h2>عجلة الحظ</h2>
+            <p>إعدادات وتشغيل الفعالية</p>
+          </div>
+        </div>
+        <span class="status-badge live"><span class="dot"></span> شغّالة</span>
+      </div>
+
+      <div class="settings-grid">
+        <div class="setting" style="grid-column:span 2">
+          <div class="s-head">
+            <div class="s-title">⚙️ إعدادات أساسية</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div>
+              <label class="field-label">مدة التسجيل</label>
+              <select class="select">
+                <option>30 ثانية</option><option selected>60 ثانية</option><option>120 ثانية</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">أمر الدخول</label>
+              <input class="input" value="!دخول">
+            </div>
+            <div>
+              <label class="field-label">الجائزة</label>
+              <input class="input" value="100 نقطة">
+            </div>
+          </div>
+        </div>
+
+        <div class="setting">
+          <div class="s-head">
+            <div class="s-title">🎁 خانات العجلة</div>
+            <span class="s-hint">6 خانات</span>
+          </div>
+          <div class="slot-list">
+            <div class="slot"><span class="num">1.</span><input value="جائزة كبرى 🏆"><span class="x">×</span></div>
+            <div class="slot"><span class="num">2.</span><input value="غني مقطع 🎤"><span class="x">×</span></div>
+            <div class="slot"><span class="num">3.</span><input value="لفة ثانية 🔄"><span class="x">×</span></div>
+            <div class="slot"><span class="num">4.</span><input value="جوكر 🃏"><span class="x">×</span></div>
+            <div class="slot"><span class="num">5.</span><input value="تحدي ⚔️"><span class="x">×</span></div>
+            <div class="slot"><span class="num">6.</span><input value="x2 💎"><span class="x">×</span></div>
+          </div>
+          <button class="add-slot" style="margin-top:6px;width:100%">+ إضافة خانة</button>
+        </div>
+
+        <div class="setting">
+          <div class="s-head">
+            <div class="s-title">🔧 خيارات</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem">
+              <div><div style="font-weight:900">ألوان ديناميكية</div><div style="font-size:.66rem;color:var(--muted)">حسب عدد الخانات</div></div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem">
+              <div><div style="font-weight:900">صور المشاركين</div><div style="font-size:.66rem;color:var(--muted)">داخل الخانات</div></div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem">
+              <div><div style="font-weight:900">صوت التكات</div><div style="font-size:.66rem;color:var(--muted)">مع الدوران</div></div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem">
+              <div><div style="font-weight:900">Confetti</div><div style="font-size:.66rem;color:var(--muted)">عند الفوز</div></div>
+              <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <button class="btn btn-success" style="flex:1">▶ بدء اللفة</button>
+        <button class="btn btn-warn">⏸ إيقاف مؤقت</button>
+        <button class="btn btn-ghost">🔄 إعادة</button>
+        <button class="btn btn-danger">⛔ إنهاء</button>
+      </div>
+    </div>
+
+    <!-- يمين: المعاينة -->
+    <div class="split-side">
+      <div class="ss-head">
+        <h3>👁️ معاينة الأوفرلي</h3>
+        <span class="status-badge live"><span class="dot"></span> Live</span>
+      </div>
+      <div class="preview-frame">
+        <div class="mini-wheel"></div>
+      </div>
+      <div class="preview-meta">
+        <div class="pm-item"><div class="pm-label">المشاركين</div><div class="pm-value" id="sv-p">14</div></div>
+        <div class="pm-item"><div class="pm-label">اللفات اليوم</div><div class="pm-value" id="sv-s">28</div></div>
+        <div class="pm-item"><div class="pm-label">الفائزين</div><div class="pm-value">12</div></div>
+        <div class="pm-item"><div class="pm-label">الجوائز الموزّعة</div><div class="pm-value">1,240</div></div>
+      </div>
+      <div class="obs-link">🔗 <b>bthlab.live/o/wheel/abufahad</b><button class="btn btn-sm btn-ghost">نسخ</button></div>
+    </div>
+
+  </div>
+  <p style="text-align:center;margin-top:18px;color:var(--muted);font-size:.78rem;max-width:700px;margin-left:auto;margin-right:auto;line-height:1.8">
+    <b style="color:var(--accent2)">Split View</b> — التحكم على اليسار، <b style="color:var(--accent2)">معاينة حية</b> للأوفرلي على اليمين. تعدّل وتشوف النتيجة فوراً. مثالي للفعاليات البسيطة كالعجلة وخمن الكلمة
+  </p>
+</div>
+
+<!-- ============================================== -->
+<!-- 2) Vertical Wizard — بطولة الخروج             -->
+<!-- ============================================== -->
+<div class="panel" id="panel-wizard">
+  <div class="wizard">
+
+    <!-- Progress -->
+    <div class="wiz-progress">
+      <div class="wstep done"><div class="wnum">✓</div><div class="wlabel">الإعدادات</div></div>
+      <div class="wline done"></div>
+      <div class="wstep done"><div class="wnum">✓</div><div class="wlabel">الأسئلة</div></div>
+      <div class="wline done"></div>
+      <div class="wstep active"><div class="wnum">3</div><div class="wlabel">المشاركين</div></div>
+      <div class="wline"></div>
+      <div class="wstep"><div class="wnum">4</div><div class="wlabel">البدء</div></div>
+      <div class="wline"></div>
+      <div class="wstep"><div class="wnum">5</div><div class="wlabel">النتائج</div></div>
+    </div>
+
+    <!-- Current step content -->
+    <div class="wiz-card">
+      <h3>👥 المشاركين في البطولة</h3>
+      <p class="wd">مراجعة قائمة المشاركين قبل بدء بطولة الإقصاء</p>
+
+      <div class="wiz-fields">
+        <div>
+          <label class="field-label">عدد المشاركين الحالي</label>
+          <input class="input" value="22 لاعب" readonly>
+        </div>
+        <div>
+          <label class="field-label">الحد الأدنى</label>
+          <input class="input" value="8 لاعبين" readonly>
+        </div>
+        <div>
+          <label class="field-label">الحد الأقصى</label>
+          <input class="input" value="32 لاعب" readonly>
+        </div>
+        <div>
+          <label class="field-label">طريقة الإقصاء</label>
+          <select class="select"><option selected>سؤال خاطئ = إقصاء</option><option>أبطأ إجابة = إقصاء</option></select>
+        </div>
+      </div>
+
+      <h4 style="font-size:.85rem;font-weight:900;margin-bottom:8px;color:var(--muted)">📋 المشاركين المسجّلين</h4>
+      <div class="q-bank">
+        <div class="q-item"><div class="qn">1</div><div class="qt">نورة الصقري</div><span class="qcat">@noura_alsaqry</span><div class="qedit">⋮</div></div>
+        <div class="q-item"><div class="qn">2</div><div class="qt">سلطان العنزي</div><span class="qcat">@sultan99</span><div class="qedit">⋮</div></div>
+        <div class="q-item"><div class="qn">3</div><div class="qt">ريم الشمري</div><span class="qcat">@reem_sh</span><div class="qedit">⋮</div></div>
+        <div class="q-item"><div class="qn">4</div><div class="qt">خالد المطيري</div><span class="qcat">@khalid_m</span><div class="qedit">⋮</div></div>
+        <div class="q-item"><div class="qn">5</div><div class="qt">العنود السبيعي</div><span class="qcat">@anoud</span><div class="qedit">⋮</div></div>
+        <div class="q-item"><div class="qn">⋮</div><div class="qt" style="color:var(--muted)">+ 17 مشارك إضافي</div><span class="qcat">طي</span><div class="qedit">⌄</div></div>
+      </div>
+
+      <div class="wiz-actions">
+        <button class="btn btn-ghost wiz-back">← السابق</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost">حفظ كمسودة</button>
+          <button class="btn btn-primary">التالي: البدء →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview small card -->
+    <div class="wiz-card" style="background:linear-gradient(145deg,var(--card),#1a0a0a)">
+      <h3 style="color:#fca5a5">⚠️ ملخص قبل البدء</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:14px">
+        <div><div style="font-size:.66rem;color:var(--muted)">المشاركين</div><div style="font-weight:900;font-size:1.1rem">22</div></div>
+        <div><div style="font-size:.66rem;color:var(--muted)">الأسئلة</div><div style="font-weight:900;font-size:1.1rem">222</div></div>
+        <div><div style="font-size:.66rem;color:var(--muted)">الجولات المتوقعة</div><div style="font-weight:900;font-size:1.1rem">~6</div></div>
+        <div><div style="font-size:.66rem;color:var(--muted)">المدة التقديرية</div><div style="font-weight:900;font-size:1.1rem">25 دقيقة</div></div>
+      </div>
+    </div>
+  </div>
+  <p style="text-align:center;margin-top:18px;color:var(--muted);font-size:.78rem;max-width:700px;margin-left:auto;margin-right:auto;line-height:1.8">
+    <b style="color:var(--accent2)">Vertical Wizard</b> — تدفق <b style="color:var(--accent2)">خطوة بخطوة</b> مع شريط تقدم علوي. مثالي للفعاليات المعقدة (بطولة الخروج، المليونير، الضربة القاضية) اللي تحتاج إعداد مرتّب قبل البدء
+  </p>
+</div>
+
+<!-- ============================================== -->
+<!-- 3) Command Center — حرب الكلمات              -->
+<!-- ============================================== -->
+<div class="panel" id="panel-cc">
+  <div class="cc">
+
+    <!-- يمين: المشاركين -->
+    <div class="cc-col">
+      <div class="cc-card">
+        <h4>👥 المشاركين <span class="badge">28</span></h4>
+        <div class="players-list" id="players">
+          <div class="player-row"><div class="pav" style="background:#3b82f6">ن</div><div class="pn">نورة</div><span class="pt b">أزرق</span><span class="pscore">+12</span></div>
+          <div class="player-row"><div class="pav" style="background:#ef4444">س</div><div class="pn">سلطان</div><span class="pt r">أحمر</span><span class="pscore">+18</span></div>
+          <div class="player-row"><div class="pav" style="background:#3b82f6">ر</div><div class="pn">ريم</div><span class="pt b">أزرق</span><span class="pscore">+9</span></div>
+          <div class="player-row"><div class="pav" style="background:#ef4444">خ</div><div class="pn">خالد</div><span class="pt r">أحمر</span><span class="pscore">+14</span></div>
+          <div class="player-row"><div class="pav" style="background:#3b82f6">ع</div><div class="pn">العنود</div><span class="pt b">أزرق</span><span class="pscore">+22</span></div>
+          <div class="player-row"><div class="pav" style="background:#ef4444">م</div><div class="pn">مشعل</div><span class="pt r">أحمر</span><span class="pscore">+7</span></div>
+          <div class="player-row"><div class="pav" style="background:#3b82f6">س</div><div class="pn">سارة</div><span class="pt b">أزرق</span><span class="pscore">+11</span></div>
+          <div class="player-row"><div class="pav" style="background:#ef4444">ف</div><div class="pn">فيصل</div><span class="pt r">أحمر</span><span class="pscore">+16</span></div>
+        </div>
+      </div>
+
+      <div class="cc-card">
+        <h4>⚙️ إعدادات سريعة</h4>
+        <div style="display:flex;flex-direction:column;gap:9px;font-size:.78rem">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><div style="font-weight:900">القاموس النشط</div><div style="font-size:.65rem;color:var(--muted)">1,600 كلمة</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><div style="font-weight:900">الحد الأدنى للحروف</div></div>
+            <span style="font-weight:900;color:var(--accent2)">3</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><div style="font-weight:900">السماح بالتكرار</div></div>
+            <div class="toggle" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><div style="font-weight:900">صوت الانفجارات</div></div>
+            <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- وسط: الشاشات الكبيرة -->
+    <div class="cc-col">
+
+      <div class="main-action-bar">
+        <button class="btn btn-success">▶ بدء الجولة</button>
+        <button class="btn btn-warn">⏸ إيقاف</button>
+        <button class="btn btn-ghost">⏭ جولة جديدة</button>
+        <button class="btn btn-danger">⛔ إنهاء</button>
+      </div>
+
+      <div class="cc-screens">
+        <div class="cc-screen">
+          <div class="sn">— الفريق الأزرق —</div>
+          <div class="team-name" style="color:#93c5fd">🔵 فريق النمور</div>
+          <div class="team-hp"><i style="width:62%" id="hp-b"></i></div>
+          <div class="team-stats">
+            <span>HP: <b id="hp-b-v">62</b>/100</span>
+            <span>كلمات: <b>47</b></span>
+            <span>هدايا: <b>18</b></span>
+          </div>
+          <div class="team-words">
+            <div class="tw">سيف</div><div class="tw">قمر</div><div class="tw">نخلة</div><div class="tw">صقر</div><div class="tw">بحر</div>
+          </div>
+          <div class="live-meter"><div><div class="lm-label">المعدل</div><div class="lm-val" style="color:#22d3ee">8.2</div></div><div style="font-size:.7rem;color:var(--muted)">ك/دق</div></div>
+        </div>
+
+        <div class="cc-screen r red">
+          <div class="sn">— الفريق الأحمر —</div>
+          <div class="team-name" style="color:#fca5a5">🔴 فريق الصقور</div>
+          <div class="team-hp"><i style="width:78%" id="hp-r"></i></div>
+          <div class="team-stats">
+            <span>HP: <b id="hp-r-v">78</b>/100</span>
+            <span>كلمات: <b>39</b></span>
+            <span>هدايا: <b>24</b></span>
+          </div>
+          <div class="team-words">
+            <div class="tw">نار</div><div class="tw">جبل</div><div class="tw">نجم</div><div class="tw">ذهب</div><div class="tw">ورد</div>
+          </div>
+          <div class="live-meter"><div><div class="lm-label">المعدل</div><div class="lm-val" style="color:#fca5a5">6.5</div></div><div style="font-size:.7rem;color:var(--muted)">ك/دق</div></div>
+        </div>
+      </div>
+
+      <div class="cc-controls">
+        <div style="font-size:.75rem;font-weight:900;color:var(--muted);margin-bottom:8px">⚡ إجراءات سريعة</div>
+        <div class="cc-row">
+          <button class="cc-mini-btn"><span class="mi">💥</span> ضربة قوية</button>
+          <button class="cc-mini-btn"><span class="mi">🛡️</span> درع لفريق</button>
+          <button class="cc-mini-btn"><span class="mi">⚡</span> صاعقة</button>
+          <button class="cc-mini-btn"><span class="mi">🎁</span> هدية مزدوجة</button>
+        </div>
+        <div class="cc-row">
+          <button class="cc-mini-btn"><span class="mi">📢</span> تنبيه</button>
+          <button class="cc-mini-btn"><span class="mi">🔄</span> تبديل لاعب</button>
+          <button class="cc-mini-btn"><span class="mi">🎯</span> كلمة خاصة</button>
+          <button class="cc-mini-btn"><span class="mi">⏱️</span> +30 ثانية</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- يسار: السجل -->
+    <div class="cc-col">
+      <div class="cc-card">
+        <h4>📜 سجل الأحداث</h4>
+        <div class="log" id="log">
+          <div class="log-item success"><span class="lt">23:14</span> 🔴 ضربة قوية من فريق الصقور (-12 HP)</div>
+          <div class="log-item"><span class="lt">23:13</span> 🎁 نورة أرسلت هدية × 5</div>
+          <div class="log-item"><span class="lt">23:13</span> 🔵 كلمة "سيف" - +3 HP</div>
+          <div class="log-item warn"><span class="lt">23:12</span> ⚠️ كلمة مكررة من فيصل</div>
+          <div class="log-item"><span class="lt">23:11</span> 🔴 كلمة "نار" - +3 HP</div>
+          <div class="log-item"><span class="lt">23:11</span> 👤 انضم: تركي للفريق الأزرق</div>
+          <div class="log-item success"><span class="lt">23:10</span> ⚡ صاعقة! -18 HP من النمور</div>
+        </div>
+      </div>
+
+      <div class="cc-card">
+        <h4>🔗 روابط OBS</h4>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:.7rem">
+          <div class="obs-link" style="margin:0"><b>bthlab.live/o/war/battle</b><button class="btn btn-sm btn-ghost">📋</button></div>
+          <div class="obs-link" style="margin:0"><b>bthlab.live/o/war/scores</b><button class="btn btn-sm btn-ghost">📋</button></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <p style="text-align:center;margin-top:18px;color:var(--muted);font-size:.78rem;max-width:700px;margin-left:auto;margin-right:auto;line-height:1.8">
+    <b style="color:var(--accent2)">Command Center</b> — لوحة <b style="color:var(--accent2)">شاملة بثلاث أعمدة</b>: مشاركين/إعدادات على يمين، شاشتين كبار للفرق في الوسط، سجل أحداث + روابط على اليسار. مثالية للفعاليات المعقدة كحرب الكلمات وحرب القلاع
+  </p>
+</div>
+
+<!-- ============================================== -->
+<!-- 4) Floating Hub — خمن الكلمة                  -->
+<!-- ============================================== -->
+<div class="panel" id="panel-fh">
+  <div class="fh">
+
+    <div class="fh-hero">
+      <div class="fh-icon">🔤</div>
+      <h1 class="fh-title">خمّن الكلمة</h1>
+      <div class="fh-status"><span class="dot"></span> الجولة 3 من 10 · شغّالة</div>
+
+      <div class="fh-word">
+        <div class="fh-letter r">غ</div>
+        <div class="fh-letter">ز</div>
+        <div class="fh-letter r">ا</div>
+        <div class="fh-letter">ل</div>
+      </div>
+      <div class="fh-hint">💡 التلميح: <b>حيوان صحراوي</b> · 2 من 4 حروف انكشفت</div>
+
+      <div class="fh-meta">
+        <div class="fhm"><b id="fh-time">18</b><span>ثانية</span></div>
+        <div class="fhm"><b id="fh-tries">47</b><span>تخمين</span></div>
+        <div class="fhm"><b style="color:var(--gold)">60</b><span>نقطة</span></div>
+      </div>
+
+      <div style="margin-top:20px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;position:relative">
+        <button class="btn btn-warn">⏸ إيقاف مؤقت</button>
+        <button class="btn btn-primary">⏭ كشف حرف</button>
+        <button class="btn btn-ghost" style="background:var(--card);border-color:var(--border)">💡 كشف تلميح</button>
+        <button class="btn btn-danger">⛔ إنهاء الجولة</button>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="fh-quick">
+      <button class="fhq">
+        <span class="ic" style="color:#22d3ee">➕</span>
+        <span class="nm">كلمة جديدة</span>
+        <span class="sub">من القاموس</span>
+      </button>
+      <button class="fhq">
+        <span class="ic" style="color:#f5c542">🎁</span>
+        <span class="nm">رفع الجائزة</span>
+        <span class="sub">100 → 150</span>
+      </button>
+      <button class="fhq">
+        <span class="ic" style="color:#a855f7">⏱️</span>
+        <span class="nm">+15 ثانية</span>
+        <span class="sub">للوقت</span>
+      </button>
+      <button class="fhq danger">
+        <span class="ic">🚫</span>
+        <span class="nm">حظر متخمن</span>
+        <span class="sub">مؤقت</span>
+      </button>
+    </div>
+
+    <!-- Drawer -->
+    <button class="fh-drawer-trigger" id="dt" onclick="document.getElementById('drawer').classList.toggle('open');this.querySelector('.arr').textContent=document.getElementById('drawer').classList.contains('open')?'⌃':'⌄'">
+      ⚙️ إعدادات متقدمة <span class="arr">⌄</span>
+    </button>
+    <div class="fh-drawer" id="drawer">
+      <div class="fh-drawer-inner">
+        <div class="fh-drawer-grid">
+          <div>
+            <label class="field-label">القاموس المستخدم</label>
+            <select class="select"><option selected>عربي عام (1,600 كلمة)</option><option>أسماء (450)</option><option>أفعال (380)</option></select>
+          </div>
+          <div>
+            <label class="field-label">صعوبة الكلمات</label>
+            <select class="select"><option>سهل (3-4 حروف)</option><option selected>متوسط (5-6)</option><option>صعب (7+)</option></select>
+          </div>
+          <div>
+            <label class="field-label">عدد الحروف المكشوفة بداية</label>
+            <input class="input" value="1" type="number">
+          </div>
+          <div>
+            <label class="field-label">مدة الكشف التلقائي</label>
+            <input class="input" value="15 ثانية">
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem">
+            <div><div style="font-weight:900">السماح بالأسماء</div><div style="font-size:.66rem;color:var(--muted)">أسماء الأشخاص والأماكن</div></div>
+            <div class="toggle" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem">
+            <div><div style="font-weight:900">تأكيد إجابات مشابهة</div><div style="font-size:.66rem;color:var(--muted)">قبول أخطاء إملائية بسيطة</div></div>
+            <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <p style="text-align:center;margin-top:22px;color:var(--muted);font-size:.78rem;max-width:700px;margin-left:auto;margin-right:auto;line-height:1.8">
+    <b style="color:var(--accent2)">Floating Hub</b> — لوحة <b style="color:var(--accent2)">مدمجة وبصرية</b> تركّز على الحالة الحالية للفعالية + إجراءات سريعة كبيرة + drawer للإعدادات المتقدمة. مثالية للفعاليات السريعة (خمن الكلمة، المليونير، السباق) واستخدام الجوال
+  </p>
+</div>
+
+<a href="/" style="position:fixed;top:14px;right:14px;background:rgba(12,12,22,.85);backdrop-filter:blur(10px);color:#22d3ee;border:1px solid #0891b2;border-radius:30px;padding:8px 16px;font-family:Tajawal,sans-serif;font-weight:900;font-size:.78rem;text-decoration:none;z-index:200">← المعرض</a>
+
+<script>
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab,.panel").forEach(x=>x.classList.remove("active"));
+  t.classList.add("active");
+  document.getElementById("panel-"+t.dataset.p).classList.add("active");
+});
+
+/* محاكاة بيانات حية - Split View */
+setInterval(()=>{
+  const p=document.getElementById("sv-p");
+  if(p)p.textContent=12+Math.floor(Math.random()*6);
+},2000);
+
+/* محاكاة Command Center HP */
+let hpB=62, hpR=78;
+setInterval(()=>{
+  hpB+=Math.floor(Math.random()*5-2);
+  hpR+=Math.floor(Math.random()*5-2);
+  hpB=Math.max(20,Math.min(95,hpB));
+  hpR=Math.max(20,Math.min(95,hpR));
+  const b=document.getElementById("hp-b"),r=document.getElementById("hp-r");
+  const bv=document.getElementById("hp-b-v"),rv=document.getElementById("hp-r-v");
+  if(b){b.style.width=hpB+"%";bv.textContent=hpB;}
+  if(r){r.style.width=hpR+"%";rv.textContent=hpR;}
+},1800);
+
+/* محاكاة سجل الأحداث */
+const EVENTS=[
+  {t:"success",m:"💥 ضربة قوية! -12 HP"},
+  {t:"",m:"🎁 سلطان أرسل وردة × 5"},
+  {t:"",m:"🔵 كلمة 'قمر' - +3 HP"},
+  {t:"warn",m:"⚠️ كلمة مكررة من ريم"},
+  {t:"",m:"🔴 كلمة 'نخلة' - +3 HP"},
+  {t:"",m:"👤 جود انضمت للفريق الأحمر"},
+  {t:"success",m:"⚡ صاعقة! -18 HP"}
+];
+setInterval(()=>{
+  const log=document.getElementById("log");
+  if(!log||!document.getElementById("panel-cc").classList.contains("active"))return;
+  const e=EVENTS[Math.floor(Math.random()*EVENTS.length)];
+  const t=new Date(),ts=t.getHours()+":"+String(t.getMinutes()).padStart(2,"0");
+  const d=document.createElement("div");
+  d.className="log-item"+(e.t?" "+e.t:"");
+  d.innerHTML=`<span class="lt">${ts}</span> ${e.m}`;
+  log.insertBefore(d,log.firstChild);
+  while(log.children.length>9)log.removeChild(log.lastChild);
+},2200);
+
+/* محاكاة الوقت في Floating Hub */
+let t=18,tries=47;
+setInterval(()=>{
+  const e=document.getElementById("fh-time");
+  if(!e)return;
+  t--;if(t<5)t=18;
+  e.textContent=t;
+  if(Math.random()>.4)tries+=Math.floor(Math.random()*3);
+  document.getElementById("fh-tries").textContent=tries;
+},1000);
+</script>
+</body>
+</html>

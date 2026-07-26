@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧊 الجليد</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent !important;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center}
+
+.main{position:relative;width:min(96vw,640px);aspect-ratio:16/10;opacity:0;transition:opacity .2s}
+.main.show{opacity:1}
+.scene{position:absolute;inset:0;border-radius:18px;overflow:hidden;border:2px solid rgba(125,211,252,.4);
+  background:radial-gradient(ellipse at 50% 0%,#0c2438 0%,#06121d 60%,#040a12 100%);box-shadow:0 0 30px rgba(0,0,0,.6)}
+
+/* الثلج المتساقط */
+.snow{position:absolute;color:#bae6fd;animation:snowfall linear infinite;font-size:.7rem;opacity:.7;top:-5%}
+@keyframes snowfall{to{transform:translateY(1200%)}}
+
+/* HUD */
+.ice-head{position:absolute;top:8px;right:10px;background:#0c0c16dd;border:1px solid #7dd3fc;color:#7dd3fc;border-radius:12px;padding:4px 14px;font-weight:900;font-size:.78rem;z-index:15}
+.phase-label{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:15;font-size:.72rem;color:#fbbf24;font-weight:900;background:#0c0c16cc;border-radius:12px;padding:4px 14px;white-space:nowrap;max-width:60%;overflow:hidden;text-overflow:ellipsis}
+
+/* الكلمة المطلوبة */
+.word-box{position:absolute;top:40px;left:50%;transform:translateX(-50%);z-index:14;text-align:center;display:none;
+  background:#0c0c16e6;border:2px solid rgba(125,211,252,.5);border-radius:14px;padding:8px 22px;box-shadow:0 0 22px rgba(125,211,252,.25)}
+.word-box.show{display:block;animation:popIn .35s cubic-bezier(.2,1.5,.4,1)}
+@keyframes popIn{0%{opacity:0;transform:translateX(-50%) scale(.6)}100%{opacity:1;transform:translateX(-50%) scale(1)}}
+.word-text{font-size:1.5rem;font-weight:900;color:#fff;letter-spacing:3px;text-shadow:0 0 16px rgba(125,211,252,.6)}
+.word-sub{font-size:.62rem;color:#bae6fd;font-weight:700}
+.timer-bar{height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin-top:5px}
+.timer-fill{height:100%;background:linear-gradient(90deg,#38bdf8,#818cf8);transition:width .15s linear}
+.timer-fill.warn{background:linear-gradient(90deg,#f59e0b,#ef4444)}
+
+/* التسجيل */
+.reg-banner{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:14;text-align:center;display:none;
+  background:#0c0c16e6;border:2px solid rgba(125,211,252,.45);border-radius:16px;padding:14px 24px;box-shadow:0 0 24px rgba(125,211,252,.2)}
+.reg-banner.show{display:block;animation:popIn2 .35s cubic-bezier(.2,1.5,.4,1)}
+@keyframes popIn2{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.reg-title{font-size:.8rem;color:#fbbf24;font-weight:900}
+.reg-keyword{font-size:1.4rem;font-weight:900;color:#fff;margin:2px 0;text-shadow:0 0 14px rgba(125,211,252,.6)}
+.reg-count{font-size:.74rem;color:#9ca3af;font-weight:700}
+
+/* شبكة المكعبات */
+.ice-grid{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;padding:56px 26px 20px;z-index:10}
+.cube{position:relative;width:var(--csz,88px);height:var(--csz,88px);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;
+  background:linear-gradient(145deg,rgba(125,211,252,.32),rgba(56,131,180,.18));
+  border:2px solid rgba(186,230,253,.5);box-shadow:inset 0 0 24px rgba(125,211,252,.3),0 6px 18px rgba(0,0,0,.5);
+  backdrop-filter:blur(2px);transition:.3s;animation:cubeIn .4s cubic-bezier(.2,1.5,.4,1)}
+@keyframes cubeIn{0%{opacity:0;transform:scale(.3)}100%{opacity:1;transform:scale(1)}}
+.cube .av{width:calc(var(--csz,88px)*.43);height:calc(var(--csz,88px)*.43);border-radius:50%;overflow:hidden;background:linear-gradient(135deg,#0891b2,#6d28d9);display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;filter:saturate(.4) brightness(.85);font-size:calc(var(--csz,88px)*.2)}
+.cube .av img{width:100%;height:100%;object-fit:cover}
+.cube .nm{font-size:.6rem;font-weight:900;color:#bae6fd;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cube::after{content:"";position:absolute;inset:0;border-radius:14px;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.35) 45%,transparent 60%)}
+.cube.crack1::before{content:"";position:absolute;inset:0;background:linear-gradient(75deg,transparent 48%,rgba(255,255,255,.6) 49.5%,transparent 51%)}
+.cube.crack2::before{content:"";position:absolute;inset:0;background:
+  linear-gradient(75deg,transparent 48%,rgba(255,255,255,.7) 49.5%,transparent 51%),
+  linear-gradient(-35deg,transparent 47%,rgba(255,255,255,.6) 49%,transparent 51%),
+  linear-gradient(10deg,transparent 58%,rgba(255,255,255,.5) 59.5%,transparent 61%)}
+.cube.free{background:linear-gradient(145deg,rgba(34,197,94,.25),rgba(16,98,52,.2));border-color:#22c55e;box-shadow:0 0 22px rgba(34,197,94,.4)}
+.cube.free .av{filter:none}
+.cube.free .nm{color:#86efac}
+.cube.loser{background:linear-gradient(145deg,rgba(239,68,68,.2),rgba(90,15,15,.25));border-color:rgba(239,68,68,.6);opacity:.45}
+.cube.loser .nm{color:#fca5a5}
+.cube.shatter{animation:shatterA .5s forwards}
+@keyframes shatterA{40%{transform:scale(1.12)}100%{transform:scale(1)}}
+.shard{position:absolute;width:10px;height:10px;background:rgba(186,230,253,.85);clip-path:polygon(50% 0,100% 100%,0 100%);animation:shardFly .7s forwards;z-index:20}
+@keyframes shardFly{to{transform:translate(var(--dx),var(--dy)) rotate(var(--rot));opacity:0}}
+
+/* الفائز */
+.winner-box{position:absolute;inset:0;background:rgba(4,10,20,.9);backdrop-filter:blur(10px);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:30}
+.winner-box.show{display:flex;animation:fadeIn .5s ease}
+.winner-icon{font-size:3.2rem;margin-bottom:6px}
+.winner-name{font-size:1.7rem;font-weight:900;color:#7dd3fc;text-shadow:0 0 18px rgba(125,211,252,.7)}
+.winner-sub{font-size:.85rem;color:rgba(255,255,255,.5);margin-top:4px;font-weight:900}
+@keyframes fadeIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+
+.confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:31}
+</style>
+</head>
+<body>
+<div class="main" id="box">
+  <div class="scene" id="scene">
+    <div class="ice-head" id="ice-head">🧊 حرروا أصحابكم!</div>
+    <div class="phase-label" id="phase-label"></div>
+    <div class="word-box" id="word-box">
+      <div class="word-text" id="word-text"></div>
+      <div class="word-sub">اكتب الكلمة عشان تذوب! 🔥</div>
+      <div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div>
+    </div>
+    <div class="reg-banner" id="reg-banner">
+      <div class="reg-title">اكتب في الشات عشان تشارك</div>
+      <div class="reg-keyword" id="reg-keyword">جليد</div>
+      <div class="reg-count" id="reg-count">0 لاعب</div>
+    </div>
+    <div class="ice-grid" id="ice-grid"></div>
+    <div class="winner-box" id="winner-box">
+      <div class="winner-icon">🏆</div>
+      <div class="winner-name" id="winner-name"></div>
+      <div class="winner-sub">الناجي الأخير من الجليد!</div>
+    </div>
+    <div class="confetti" id="confetti"></div>
+  </div>
+</div>
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();if(username)socket.emit('join',{username});
+var timerInt=null;
+var COLORS=['#38bdf8','#818cf8','#22c55e','#fbbf24','#ec4899','#f59e0b'];
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+/* الثلج المتساقط */
+(function makeSnow(){
+  var scene=document.getElementById('scene');
+  for(var i=0;i<22;i++){
+    var s=document.createElement('div');s.className='snow';s.textContent='❄';
+    s.style.left=Math.random()*100+'%';
+    s.style.animationDuration=(5+Math.random()*7)+'s';
+    s.style.animationDelay=(-Math.random()*8)+'s';
+    s.style.fontSize=(.4+Math.random()*.5)+'rem';
+    scene.appendChild(s);
+  }
+})();
+
+/* إدارة المكعبات */
+var cubes={};  // name -> {el, avatar, frozen}
+
+function cubeSize(){
+  var n=Object.keys(cubes).length;
+  return n<=6?88 : n<=8?76 : n<=12?64 : n<=18?54 : 46;
+}
+function applySizes(){
+  var sz=cubeSize();
+  Object.keys(cubes).forEach(function(n){cubes[n].el.style.setProperty('--csz',sz+'px');});
+}
+function makeCube(name,avatar){
+  var d=document.createElement('div');
+  d.className='cube';
+  var avInner=avatar
+    ? '<img src="'+esc(avatar)+'" onerror="this.parentElement.textContent=\''+esc((name||'?')[0])+'\'">'
+    : esc((name||'?')[0]);
+  d.innerHTML='<div class="av">'+avInner+'</div><div class="nm">'+esc(name)+'</div>';
+  return d;
+}
+function addCube(name,avatar){
+  if(cubes[name])return;
+  var el=makeCube(name,avatar);
+  document.getElementById('ice-grid').appendChild(el);
+  cubes[name]={el:el,avatar:avatar||null,frozen:true};
+  applySizes();
+}
+function clearCubes(){
+  document.getElementById('ice-grid').innerHTML='';
+  cubes={};
+}
+function refreezeAll(){
+  Object.keys(cubes).forEach(function(n){
+    var c=cubes[n];
+    c.frozen=true;
+    c.el.classList.remove('crack1','crack2','free','shatter','loser');
+  });
+}
+function unfreezeCube(name){
+  var c=cubes[name];
+  if(!c||!c.frozen)return;
+  c.frozen=false;
+  var el=c.el;
+  el.classList.add('crack1');
+  setTimeout(function(){el.classList.remove('crack1');el.classList.add('crack2');},220);
+  setTimeout(function(){
+    el.classList.remove('crack2');
+    el.classList.add('free','shatter');
+    spawnShards(el);
+  },460);
+}
+function spawnShards(el){
+  var scene=document.getElementById('scene');
+  var rect=el.getBoundingClientRect(),sr=scene.getBoundingClientRect();
+  for(var k=0;k<10;k++){
+    var sh=document.createElement('div');sh.className='shard';
+    sh.style.left=(rect.left-sr.left+rect.width/2)+'px';
+    sh.style.top=(rect.top-sr.top+rect.height/2)+'px';
+    sh.style.setProperty('--dx',(Math.random()*120-60)+'px');
+    sh.style.setProperty('--dy',(Math.random()*120-60)+'px');
+    sh.style.setProperty('--rot',(Math.random()*360)+'deg');
+    scene.appendChild(sh);
+    setTimeout(function(s){s.remove();}.bind(null,sh),720);
+  }
+}
+
+/* الأحداث */
+socket.on('ice:register',function(d){
+  document.getElementById('box').classList.add('show');
+  if(timerInt){clearInterval(timerInt);timerInt=null;}
+  clearCubes();
+  document.getElementById('reg-banner').classList.add('show');
+  document.getElementById('reg-keyword').textContent=d.keyword;
+  document.getElementById('reg-count').textContent='0 لاعب';
+  document.getElementById('word-box').classList.remove('show');
+  document.getElementById('winner-box').classList.remove('show');
+  document.getElementById('phase-label').textContent='📝 مرحلة التسجيل';
+  document.getElementById('ice-head').textContent='🧊 حرروا أصحابكم!';
+});
+
+socket.on('ice:joined',function(d){
+  document.getElementById('reg-count').textContent=d.count+' / '+(d.max||20)+' لاعب';
+  addCube(d.player,d.avatar);
+});
+
+socket.on('ice:locked',function(d){
+  document.getElementById('reg-banner').classList.remove('show');
+  document.getElementById('phase-label').textContent='🔒 التسجيل مقفل — '+d.count+' لاعب';
+  document.getElementById('ice-head').textContent='🧊 باقي '+d.count;
+});
+
+socket.on('ice:freeze',function(d){
+  document.getElementById('box').classList.add('show');
+  document.getElementById('reg-banner').classList.remove('show');
+  document.getElementById('winner-box').classList.remove('show');
+  // إزالة الخاسرين السابقين وإعادة تجميد الباقين
+  Object.keys(cubes).forEach(function(n){
+    if(cubes[n].el.classList.contains('loser')){cubes[n].el.remove();delete cubes[n];}
+  });
+  refreezeAll();
+  applySizes();
+  var wb=document.getElementById('word-box');
+  wb.classList.remove('show');void wb.offsetWidth;wb.classList.add('show');
+  document.getElementById('word-text').textContent=d.word;
+  document.getElementById('phase-label').textContent='❄️ الجولة '+d.round+' — الكل متجمد!';
+  document.getElementById('ice-head').textContent='🧊 باقي '+d.aliveCount;
+  // المؤقت
+  var fill=document.getElementById('timer-fill');
+  fill.style.width='100%';fill.classList.remove('warn');
+  var total=d.answerTime*1000,start=Date.now();
+  if(timerInt)clearInterval(timerInt);
+  timerInt=setInterval(function(){
+    var pct=Math.max(0,100-(Date.now()-start)/total*100);
+    fill.style.width=pct+'%';
+    if(pct<25)fill.classList.add('warn');
+    if(pct<=0){clearInterval(timerInt);timerInt=null;}
+  },50);
+});
+
+socket.on('ice:unfreeze',function(d){
+  if(!cubes[d.player])addCube(d.player,d.avatar||null);
+  unfreezeCube(d.player);
+  document.getElementById('ice-head').textContent='🧊 متجمد '+d.stillFrozen;
+});
+
+socket.on('ice:round-end',function(d){
+  if(timerInt){clearInterval(timerInt);timerInt=null;}
+  document.getElementById('word-box').classList.remove('show');
+  document.getElementById('phase-label').textContent='📊 النتائج — '+d.aliveCount+' باقي';
+  document.getElementById('ice-head').textContent='🧊 باقي '+d.aliveCount;
+  (d.frozen||[]).forEach(function(p){
+    if(!cubes[p.name])addCube(p.name,p.avatar||null);
+    cubes[p.name].el.classList.add('loser');
+  });
+  if(d.winner){
+    document.getElementById('winner-name').textContent=d.winner.name;
+    document.getElementById('winner-box').classList.add('show');
+    document.getElementById('phase-label').textContent='🏆 الناجي!';
+    fireConfetti();
+  }
+});
+
+socket.on('ice:stopped',function(){
+  document.getElementById('box').classList.remove('show');
+  if(timerInt){clearInterval(timerInt);timerInt=null;}
+});
+
+function fireConfetti(){var layer=document.getElementById('confetti'),box=document.getElementById('box'),cx=box.offsetWidth/2,cy=box.offsetHeight/2;for(var i=0;i<35;i++){var p=document.createElement('div');p.style.cssText='position:absolute;width:7px;height:11px;left:'+cx+'px;top:'+cy+'px;background:'+COLORS[i%COLORS.length]+';border-radius:2px;';layer.appendChild(p);var a=Math.random()*Math.PI*2,d=80+Math.random()*200;p.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:'translate('+Math.cos(a)*d+'px,'+Math.sin(a)*d+'px) rotate('+(600+Math.random()*600)+'deg)',opacity:0}],{duration:1400+Math.random()*500,easing:'cubic-bezier(0.4,0,0.6,1)'});setTimeout(function(el){el.remove()}.bind(null,p),2000);}}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

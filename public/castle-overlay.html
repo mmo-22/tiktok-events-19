@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🏰 حرب القلاع</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent !important;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center}
+
+.main{position:relative;width:min(96vw,660px);aspect-ratio:16/10;opacity:0;transition:opacity .2s}
+.main.show{opacity:1}
+.scene{position:absolute;inset:0;border-radius:18px;overflow:hidden;border:2px solid rgba(168,85,247,.35);
+  background:linear-gradient(#0b0f24 0%,#1a1033 55%,#241636 70%,#120a1e 100%);box-shadow:0 0 30px rgba(0,0,0,.6)}
+
+.stars{position:absolute;inset:0}
+.star{position:absolute;width:2px;height:2px;background:#fff;border-radius:50%;opacity:.6;animation:tw 2.4s infinite}
+@keyframes tw{50%{opacity:.15}}
+.ground{position:absolute;bottom:0;left:0;right:0;height:16%;background:#0d0a14;border-top:2px solid #2a2040}
+
+/* القلاع */
+.castle{position:absolute;bottom:14%;font-size:3.6rem;filter:drop-shadow(0 4px 8px rgba(0,0,0,.7));transition:.3s}
+.cs-r{right:6%}.cs-l{left:6%}
+.cs-hp{position:absolute;bottom:calc(14% + 4.4rem);width:24%;height:12px;background:#111122;border-radius:8px;overflow:hidden;border:1px solid #222}
+.cs-hp i{display:block;height:100%;transition:width .4s}
+.cs-hp.r{right:4%}.cs-hp.r i{background:linear-gradient(90deg,#ef4444,#f97316);width:100%}
+.cs-hp.l{left:4%}.cs-hp.l i{background:linear-gradient(90deg,#3b82f6,#22d3ee);width:100%}
+.cs-hp i.low{animation:hpBlink .6s infinite}
+@keyframes hpBlink{50%{filter:brightness(1.7)}}
+.cs-name{position:absolute;bottom:calc(14% + 5.6rem);font-size:.72rem;font-weight:900;padding:2px 12px;border-radius:12px;background:#0c0c16dd;white-space:nowrap}
+.cs-name.r{right:6%;color:#fca5a5;border:1px solid #7f1d1d}
+.cs-name.l{left:7%;color:#93c5fd;border:1px solid #1e3a8a}
+.cs-stats{position:absolute;bottom:4%;font-size:.6rem;font-weight:900;color:rgba(255,255,255,.55);background:#0c0c16aa;border-radius:8px;padding:2px 8px}
+.cs-stats.r{right:6%}.cs-stats.l{left:6%}
+
+/* القذائف والانفجار */
+.proj{position:absolute;font-size:1.3rem;z-index:6;filter:drop-shadow(0 0 8px rgba(245,197,66,.8))}
+.boom{position:absolute;font-size:2.2rem;z-index:7;animation:boomA .55s forwards}
+@keyframes boomA{0%{transform:scale(.3);opacity:1}70%{transform:scale(1.4)}100%{transform:scale(1.7);opacity:0}}
+.dmg{animation:dmgA .4s}
+@keyframes dmgA{0%,100%{filter:drop-shadow(0 4px 8px rgba(0,0,0,.7))}50%{filter:drop-shadow(0 0 16px #ef4444) brightness(1.6)}}
+.shake{animation:shk .35s}
+@keyframes shk{0%,100%{transform:translate(0)}25%{transform:translate(-4px,2px)}50%{transform:translate(4px,-2px)}75%{transform:translate(-2px,-2px)}}
+
+/* HUD */
+.cw-word{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#0c0c16ee;border:1px solid #f5c542;color:#f5c542;border-radius:12px;padding:5px 18px;font-weight:900;font-size:.82rem;z-index:8;white-space:nowrap;max-width:70%;overflow:hidden;text-overflow:ellipsis}
+.atk-feed{position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:8;display:flex;flex-direction:column;gap:3px;align-items:center;max-height:70px;overflow:hidden}
+.atk-item{font-size:.62rem;font-weight:900;background:#0c0c16cc;border-radius:8px;padding:2px 10px;animation:slideIn .3s;white-space:nowrap}
+.atk-item.red{color:#fca5a5}.atk-item.blue{color:#93c5fd}
+@keyframes slideIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1}}
+
+/* التسجيل */
+.reg-panel{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);z-index:9;text-align:center;display:none;
+  background:#0c0c16e6;border:2px solid rgba(245,197,66,.4);border-radius:16px;padding:12px 22px;box-shadow:0 0 24px rgba(0,0,0,.5)}
+.reg-panel.show{display:block;animation:popIn .35s cubic-bezier(.2,1.5,.4,1)}
+@keyframes popIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.reg-info{font-size:.8rem;color:rgba(255,255,255,.75);font-weight:900;margin-bottom:8px}
+.reg-info b.r{color:#fca5a5}.reg-info b.b{color:#93c5fd}
+.team-counts{display:flex;justify-content:center;gap:18px;margin-bottom:8px}
+.tc{text-align:center;font-size:.72rem}
+.tc-num{font-size:1.1rem;font-weight:900;color:#fff}
+.reg-slots{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;max-height:36px;overflow:hidden;max-width:280px}
+
+/* الفائز */
+.winner-overlay{position:absolute;inset:0;background:rgba(10,8,20,.88);backdrop-filter:blur(10px);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:12}
+.winner-overlay.show{display:flex;animation:winIn .5s ease}
+.winner-icon{font-size:3.4rem;margin-bottom:8px}
+.winner-text{font-size:1.7rem;font-weight:900;color:#fff}
+.winner-stats{font-size:.8rem;color:rgba(255,255,255,.55);margin-top:6px;font-weight:900}
+@keyframes winIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+
+.confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:13}
+</style>
+</head>
+<body>
+<div class="main" id="box">
+  <div class="scene" id="scene">
+    <div class="stars" id="stars"></div>
+    <div class="cw-word" id="phase-label">🏰 حرب القلاع</div>
+    <div class="atk-feed" id="feed"></div>
+    <div class="cs-name r">🔴 قلعة الأحمر</div>
+    <div class="cs-name l">🔵 قلعة الأزرق</div>
+    <div class="cs-hp r"><i id="red-hp-fill"></i></div>
+    <div class="cs-hp l"><i id="blue-hp-fill"></i></div>
+    <div class="castle cs-r" id="castle-r">🏰</div>
+    <div class="castle cs-l" id="castle-l">🏯</div>
+    <div class="cs-stats r">❤️ <span id="red-hp-text">100</span> · ⚔️ <span id="red-atk">0</span></div>
+    <div class="cs-stats l">❤️ <span id="blue-hp-text">100</span> · ⚔️ <span id="blue-atk">0</span></div>
+    <div class="ground"></div>
+    <div class="reg-panel" id="reg-panel">
+      <div class="reg-info">اكتب <b class="r">أحمر</b> أو <b class="b">أزرق</b> عشان تختار قلعتك!</div>
+      <div class="team-counts">
+        <div class="tc">🔴<div class="tc-num" id="red-count">0</div></div>
+        <div class="tc">🔵<div class="tc-num" id="blue-count">0</div></div>
+      </div>
+      <div class="reg-slots" id="reg-slots"></div>
+    </div>
+    <div class="winner-overlay" id="winner-overlay">
+      <div class="winner-icon" id="w-icon">🏰</div>
+      <div class="winner-text" id="w-text"></div>
+      <div class="winner-stats" id="w-stats"></div>
+    </div>
+    <div class="confetti" id="confetti"></div>
+  </div>
+</div>
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();if(username)socket.emit('join',{username});
+var maxHP=100;
+var CC=['#ef4444','#3b82f6','#a855f7','#fbbf24','#22c55e','#ec4899'];
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+(function makeStars(){
+  var s=document.getElementById('stars');
+  for(var i=0;i<35;i++){
+    var d=document.createElement('div');d.className='star';
+    d.style.left=Math.random()*100+'%';d.style.top=Math.random()*60+'%';
+    d.style.animationDelay=(Math.random()*2)+'s';
+    s.appendChild(d);
+  }
+})();
+
+/* قذيفة نارية بمسار قوسي */
+var PROJ=['🔥','⚡','🪨','☄️'];
+var projIdx=0;
+function fireProjectile(fromTeam){
+  var scene=document.getElementById('scene');
+  var p=document.createElement('div');p.className='proj';
+  p.textContent=PROJ[(projIdx++)%PROJ.length];
+  scene.appendChild(p);
+  var fromR=(fromTeam==='red');           // الأحمر يمين
+  // الإحداثيات بوحدة style.right: قيمة صغيرة = قرب الحافة اليمنى (قلعة الأحمر)
+  var x0=fromR?10:84, x1=fromR?84:10;
+  var t0=performance.now(),dur=850;
+  function fr(now){
+    var t=Math.min((now-t0)/dur,1);
+    var x=x0+(x1-x0)*t;
+    var y=62-Math.sin(t*Math.PI)*42;
+    p.style.right=x+'%';p.style.top=y+'%';
+    if(t<1)requestAnimationFrame(fr);
+    else{
+      p.remove();
+      var b=document.createElement('div');b.className='boom';b.textContent='💥';
+      b.style.right=(x1-2)+'%';b.style.top='56%';
+      scene.appendChild(b);setTimeout(function(){b.remove();},560);
+      var targetEl=document.getElementById(fromR?'castle-l':'castle-r');
+      targetEl.classList.add('dmg');setTimeout(function(){targetEl.classList.remove('dmg');},420);
+      scene.classList.add('shake');setTimeout(function(){scene.classList.remove('shake');},360);
+    }
+  }
+  requestAnimationFrame(fr);
+}
+
+socket.on('castle:register',function(d){
+  document.getElementById('box').classList.add('show');
+  document.getElementById('winner-overlay').classList.remove('show');
+  document.getElementById('phase-label').textContent='📝 اختر قلعتك!';
+  document.getElementById('reg-panel').classList.add('show');
+  document.getElementById('reg-slots').innerHTML='';
+  maxHP=d.maxHP||100;
+  document.getElementById('red-hp-fill').style.width='100%';
+  document.getElementById('blue-hp-fill').style.width='100%';
+  document.getElementById('red-hp-fill').classList.remove('low');
+  document.getElementById('blue-hp-fill').classList.remove('low');
+  document.getElementById('red-hp-text').textContent=maxHP;
+  document.getElementById('blue-hp-text').textContent=maxHP;
+  document.getElementById('red-count').textContent='0';
+  document.getElementById('blue-count').textContent='0';
+  document.getElementById('red-atk').textContent='0';
+  document.getElementById('blue-atk').textContent='0';
+  document.getElementById('feed').innerHTML='';
+});
+
+socket.on('castle:joined',function(d){
+  document.getElementById('red-count').textContent=d.redCount;
+  document.getElementById('blue-count').textContent=d.blueCount;
+  var el=document.getElementById('reg-slots');
+  var color=d.team==='red'?'#ef4444':'#3b82f6';
+  var div=document.createElement('div');
+  div.style.cssText='width:28px;height:28px;border-radius:50%;border:2px solid '+color+';overflow:hidden;animation:winIn .3s ease';
+  if(d.avatar){div.innerHTML='<img src="'+d.avatar+'" style="width:100%;height:100%;object-fit:cover">';}
+  else{div.style.cssText+=';display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.1);font-size:10px;color:rgba(255,255,255,.4)';div.textContent='✓';}
+  el.appendChild(div);
+});
+
+socket.on('castle:locked',function(d){
+  document.getElementById('reg-panel').classList.remove('show');
+  document.getElementById('phase-label').textContent='🔒 التسجيل مقفل — '+d.total+' لاعب';
+});
+
+socket.on('castle:battle',function(d){
+  document.getElementById('phase-label').textContent='⚔️ المعركة بدأت! اكتب أي شيء!';
+  document.getElementById('reg-panel').classList.remove('show');
+  maxHP=d.maxHP||100;
+});
+
+socket.on('castle:attack',function(d){
+  maxHP=d.maxHP||100;
+  fireProjectile(d.team);
+  var rPct=Math.max(0,d.redHP/maxHP*100);
+  var bPct=Math.max(0,d.blueHP/maxHP*100);
+  document.getElementById('red-hp-fill').style.width=rPct+'%';
+  document.getElementById('blue-hp-fill').style.width=bPct+'%';
+  document.getElementById('red-hp-fill').classList.toggle('low',rPct<25);
+  document.getElementById('blue-hp-fill').classList.toggle('low',bPct<25);
+  document.getElementById('red-hp-text').textContent=d.redHP;
+  document.getElementById('blue-hp-text').textContent=d.blueHP;
+  document.getElementById('red-atk').textContent=d.redAttacks;
+  document.getElementById('blue-atk').textContent=d.blueAttacks;
+  var el=document.getElementById('feed');
+  var div=document.createElement('div');
+  div.className='atk-item '+(d.team==='red'?'red':'blue');
+  div.textContent=(d.team==='red'?'🔴':'🔵')+' '+d.attacker+' ⚔️';
+  el.prepend(div);while(el.children.length>3)el.removeChild(el.lastChild);
+});
+
+socket.on('castle:finish',function(d){
+  var color=d.winner==='red'?'#ef4444':'#3b82f6';
+  var name=d.winner==='red'?'🔴 قلعة الأحمر':'🔵 قلعة الأزرق';
+  document.getElementById('phase-label').textContent='🏆 انتهت المعركة!';
+  document.getElementById('w-icon').textContent=d.winner==='red'?'🏰':'🏯';
+  document.getElementById('w-text').textContent=name+' انتصرت!';
+  document.getElementById('w-text').style.color=color;
+  document.getElementById('w-stats').innerHTML='🔴 '+d.redAttacks+' هجوم &nbsp;|&nbsp; 🔵 '+d.blueAttacks+' هجوم';
+  document.getElementById('winner-overlay').classList.add('show');
+  fireConfetti();
+});
+
+socket.on('castle:stopped',function(){document.getElementById('box').classList.remove('show');});
+
+function fireConfetti(){var layer=document.getElementById('confetti'),box=document.getElementById('box'),cx=box.offsetWidth/2,cy=box.offsetHeight/2;for(var i=0;i<40;i++){var p=document.createElement('div');p.style.cssText='position:absolute;width:7px;height:11px;left:'+cx+'px;top:'+cy+'px;background:'+CC[i%CC.length]+';border-radius:2px;';layer.appendChild(p);var a=Math.random()*Math.PI*2,d=80+Math.random()*220;p.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:'translate('+Math.cos(a)*d+'px,'+Math.sin(a)*d+'px) rotate('+(600+Math.random()*600)+'deg)',opacity:0}],{duration:1400+Math.random()*500,easing:'cubic-bezier(0.4,0,0.6,1)'});setTimeout(function(el){el.remove()}.bind(null,p),2000);}}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

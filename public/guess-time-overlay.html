@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>خمن الوقت - Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{background:transparent;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+.box{background:rgba(6,6,11,.93);border:2px solid rgba(8,145,178,.5);border-radius:22px;padding:22px 28px;min-width:480px;max-width:720px;opacity:0;pointer-events:none;transition:opacity .35s;}
+.box.show{opacity:1;}
+.game-header{text-align:center;margin-bottom:12px;}
+.game-title{font-size:14px;color:#9ca3af;}
+.game-title span{color:#22d3ee;font-weight:900;}
+#screen-visible{display:none;text-align:center;}
+.timer-vis{font-size:80px;font-weight:900;color:#22d3ee;font-variant-numeric:tabular-nums;line-height:1;text-shadow:0 0 30px rgba(34,211,238,.3);}
+.timer-label{font-size:14px;color:#9ca3af;margin-top:6px;}
+#screen-hidden{display:none;text-align:center;}
+.dots-row{display:flex;justify-content:center;gap:12px;padding:18px 0;}
+.dot{width:16px;height:16px;border-radius:50%;background:#0891b2;animation:pulse .8s ease-in-out infinite;}
+.dot:nth-child(2){animation-delay:.2s;}.dot:nth-child(3){animation-delay:.4s;}
+@keyframes pulse{0%,100%{opacity:.3;transform:scale(.9)}50%{opacity:1;transform:scale(1.1)}}
+.hidden-label{font-size:16px;color:#9ca3af;}
+#screen-guessing{display:none;}
+.guess-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.guess-title{font-size:16px;font-weight:700;color:#f5c542;}
+.guess-timer{font-size:20px;font-weight:900;color:#22d3ee;font-variant-numeric:tabular-nums;}
+.leading-card{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);border-radius:12px;margin-bottom:10px;}
+.leading-av{width:36px;height:36px;border-radius:50%;overflow:hidden;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;}
+.leading-av img{width:100%;height:100%;object-fit:cover;}
+.leading-name{flex:1;font-weight:700;font-size:14px;}
+.leading-val{color:#22d3ee;font-weight:900;font-size:16px;}
+.guesses-feed{display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:hidden;}
+.guess-row{display:flex;align-items:center;gap:8px;padding:5px 10px;background:rgba(255,255,255,.04);border-radius:8px;font-size:12px;animation:slideIn .25s;}
+@keyframes slideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.guess-row-av{width:22px;height:22px;border-radius:50%;overflow:hidden;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}
+.guess-row-av img{width:100%;height:100%;object-fit:cover;}
+.guess-row-name{flex:1;color:#f0f0f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.guess-row-val{color:#22d3ee;font-weight:700;}
+#screen-ended{display:none;text-align:center;}
+.ended-title{font-size:15px;color:#f5c542;font-weight:700;margin-bottom:10px;}
+.winner-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.winner-av{width:70px;height:70px;border-radius:50%;overflow:hidden;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;border:2px solid #f5c542;}
+.winner-av img{width:100%;height:100%;object-fit:cover;}
+.winner-name{font-size:20px;font-weight:900;color:#fff;}
+.reveal-row{display:flex;gap:20px;justify-content:center;margin-top:10px;}
+.reveal-box{text-align:center;}
+.reveal-lbl{font-size:11px;color:#6b7280;margin-bottom:3px;}
+.reveal-val{font-size:28px;font-weight:900;}
+.no-winner{font-size:18px;color:#9ca3af;padding:20px 0;}
+</style>
+</head>
+<body>
+<div class="box" id="box">
+  <div class="game-header"><div class="game-title">⏱️ <span>خمن الوقت</span></div></div>
+  <div id="screen-visible"><div class="timer-vis" id="vis-num">0.0</div><div class="timer-label">العداد يشتغل...</div></div>
+  <div id="screen-hidden"><div class="dots-row"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="hidden-label">الوقت مخفي... متى يوقف؟ 👀</div></div>
+  <div id="screen-guessing">
+    <div class="guess-header"><div class="guess-title">💬 خمّنوا الوقت بالشات!</div><div class="guess-timer" id="guess-countdown">—</div></div>
+    <div class="leading-card" id="leading-card" style="display:none"><div class="leading-av" id="lead-av"></div><div class="leading-name" id="lead-name">—</div><div class="leading-val" id="lead-val">—</div></div>
+    <div class="guesses-feed" id="guesses-feed"></div>
+  </div>
+  <div id="screen-ended"><div class="ended-title">🏆 الفائز!</div><div class="winner-wrap" id="winner-wrap"></div></div>
+</div>
+<script>
+const params=new URLSearchParams(location.search),username=params.get('username')||'';
+const socket=io({reconnection:true,reconnectionDelay:500});
+let visStart=0,visInt=null,guessEndTime=0,guessInt=null;
+const recentGuesses=[];
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function show(id){['screen-visible','screen-hidden','screen-guessing','screen-ended'].forEach(s=>{document.getElementById(s).style.display=s===id?'block':'none';});document.getElementById('box').classList.add('show');}
+function hide(){document.getElementById('box').classList.remove('show');}
+function joinRoom(){if(!username)return;socket.emit('join',{username});fetch('/api/guess-time/'+username).then(r=>r.json()).then(d=>{if(d.state==='visible'){show('screen-visible');startVisTimer();}else if(d.state==='hidden'){show('screen-hidden');}else if(d.state==='guessing'){showGuessing(d.stoppedAt,d.guessDuration||20);}});}
+socket.on('connect',joinRoom);joinRoom();
+
+function startVisTimer(){visStart=Date.now();if(visInt)clearInterval(visInt);visInt=setInterval(()=>{document.getElementById('vis-num').textContent=((Date.now()-visStart)/1000).toFixed(1);},100);}
+
+socket.on('gtime:started',()=>{recentGuesses.length=0;show('screen-visible');startVisTimer();});
+socket.on('gtime:hidden',()=>{if(visInt){clearInterval(visInt);visInt=null;}show('screen-hidden');});
+socket.on('gtime:stopped',({stoppedAt,guessDuration})=>{showGuessing(stoppedAt,guessDuration);});
+
+function showGuessing(stoppedAt,guessDuration){
+  if(visInt){clearInterval(visInt);visInt=null;}
+  show('screen-guessing');
+  document.getElementById('guesses-feed').innerHTML='';
+  document.getElementById('leading-card').style.display='none';
+  guessEndTime=Date.now()+(guessDuration||20)*1000;
+  if(guessInt)clearInterval(guessInt);
+  guessInt=setInterval(()=>{var rem=Math.max(0,guessEndTime-Date.now());document.getElementById('guess-countdown').textContent=(rem/1000).toFixed(1)+'s';if(rem<=0){clearInterval(guessInt);guessInt=null;}},100);
+}
+
+socket.on('gtime:guess',({latest,leading})=>{
+  if(leading){var lc=document.getElementById('leading-card');lc.style.display='flex';var av=leading.avatar?'<img src="'+esc(leading.avatar)+'">':esc((leading.name||'?')[0]);document.getElementById('lead-av').innerHTML=av;document.getElementById('lead-name').textContent=leading.name;document.getElementById('lead-val').textContent=leading.guess.toFixed(1)+'s';}
+  recentGuesses.unshift(latest);if(recentGuesses.length>6)recentGuesses.pop();
+  var feed=document.getElementById('guesses-feed');
+  feed.innerHTML=recentGuesses.map(g=>{var a=g.avatar?'<img src="'+esc(g.avatar)+'">':esc((g.name||'?')[0]);return '<div class="guess-row"><div class="guess-row-av">'+a+'</div><span class="guess-row-name">'+esc(g.name)+'</span><span class="guess-row-val">'+g.guess.toFixed(1)+'s</span></div>';}).join('');
+});
+
+socket.on('gtime:ended',({stoppedAt,winner})=>{
+  if(guessInt){clearInterval(guessInt);guessInt=null;}
+  show('screen-ended');var wrap=document.getElementById('winner-wrap');
+  if(!winner){wrap.innerHTML='<div class="no-winner">😔 لا يوجد فائز</div>';return;}
+  var av=winner.avatar?'<img src="'+esc(winner.avatar)+'">':esc((winner.name||'?')[0]);
+  wrap.innerHTML='<div class="winner-av">'+av+'</div><div class="winner-name">'+esc(winner.name)+'</div><div class="reveal-row"><div class="reveal-box"><div class="reveal-lbl">الوقت الحقيقي</div><div class="reveal-val" style="color:#22d3ee">'+(stoppedAt/1000).toFixed(2)+'s</div></div><div class="reveal-box"><div class="reveal-lbl">تخمينه</div><div class="reveal-val" style="color:#f5c542">'+winner.guess.toFixed(1)+'s</div></div><div class="reveal-box"><div class="reveal-lbl">الفرق</div><div class="reveal-val" style="color:#86efac">'+winner.diff.toFixed(2)+'s</div></div></div>';
+  setTimeout(()=>hide(),20000);
+});
+
+socket.on('gtime:reset',()=>{if(visInt){clearInterval(visInt);visInt=null;}if(guessInt){clearInterval(guessInt);guessInt=null;}hide();});
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

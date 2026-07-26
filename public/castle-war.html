@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حرب القلاع - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root{--bg:#0d0d14;--surface:#181824;--surface2:#242436;--border:#2d2d40;--text:#f0f0f5;--muted:#9a9ab0;--purple:#a855f7;--red:#ef4444;--green:#22c55e;--blue:#3b82f6}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;padding:20px;min-height:100vh}
+  .wrap{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--surface);border-radius:12px}
+  .header h1{font-size:22px}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--muted)}
+  .badge.active{background:var(--purple);color:#fff}
+  .card{background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--border)}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--purple)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px}
+  .btn{padding:11px 16px;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px}
+  .actions{display:flex;gap:8px}
+  .teams{display:flex;gap:14px}
+  .team-card{flex:1;background:var(--surface2);border-radius:12px;padding:16px;text-align:center}
+  .team-card.red{border-top:3px solid #ef4444}
+  .team-card.blue{border-top:3px solid #3b82f6}
+  .team-hp{font-size:32px;font-weight:900;color:#fff;margin:8px 0}
+  .team-label{font-size:13px;color:var(--muted)}
+  .team-atk{font-size:12px;color:var(--muted);margin-top:4px}
+  .hp-bar{height:10px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden;margin-top:8px}
+  .hp-fill{height:100%;border-radius:5px;transition:width .3s}
+  .overlay-link{background:var(--surface2);padding:10px;border-radius:8px;font-family:monospace;font-size:12px;word-break:break-all;cursor:pointer}
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>🏰 حرب القلاع</h1><span class="badge" id="status-badge">متوقف</span></div>
+
+  <div class="card">
+    <div class="card-title">⚙️ الإعدادات</div>
+    <div class="row2">
+      <div class="field"><label>صحة القلعة (HP)</label><input type="number" id="max-hp" value="100" min="20" max="500"></div>
+      <div class="field"><label>كلمة التسجيل</label><input type="text" id="keyword" value="حرب"></div>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="startRegister()" style="flex:1;background:var(--purple);color:#fff">📝 فتح التسجيل</button>
+      <button class="btn" onclick="lockReg()" style="flex:1;background:var(--red);color:#fff">🔒 إيقاف التسجيل</button>
+      <button class="btn" onclick="startBattle()" style="flex:1;background:var(--red);color:#fff;font-size:16px">⚔️ ابدأ المعركة!</button>
+      <button class="btn" onclick="stopGame()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted)">⏹</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚔️ ساحة المعركة</div>
+    <div class="teams">
+      <div class="team-card red">
+        <div style="font-size:28px">🏰</div>
+        <div style="color:#ef4444;font-weight:700">🔴 الأحمر (<span id="r-players">0</span>)</div>
+        <div class="team-hp" id="r-hp">100</div>
+        <div class="team-label">HP</div>
+        <div class="hp-bar"><div class="hp-fill" id="r-hp-fill" style="width:100%;background:#ef4444"></div></div>
+        <div class="team-atk">⚔️ <span id="r-atk">0</span> هجوم</div>
+      </div>
+      <div style="display:flex;align-items:center;font-size:24px;font-weight:900;color:var(--purple)">VS</div>
+      <div class="team-card blue">
+        <div style="font-size:28px">🏰</div>
+        <div style="color:#3b82f6;font-weight:700">🔵 الأزرق (<span id="b-players">0</span>)</div>
+        <div class="team-hp" id="b-hp">100</div>
+        <div class="team-label">HP</div>
+        <div class="hp-bar"><div class="hp-fill" id="b-hp-fill" style="width:100%;background:#3b82f6"></div></div>
+        <div class="team-atk">⚔️ <span id="b-atk">0</span> هجوم</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 رابط الـ Overlay</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="overlay-link" id="overlay-link" style="flex:1">—</div>
+      <button class="btn" onclick="copyLink()" style="background:var(--purple);color:#fff;padding:10px 16px;font-size:13px">📋 نسخ</button>
+    </div>
+  </div>
+</div>
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();if(username)socket.emit('join',{username});
+document.getElementById('overlay-link').textContent=location.origin+'/castle-overlay.html?username='+username;
+function copyLink(){navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);}
+var maxHP=100;
+
+async function startRegister(){
+  maxHP=parseInt(document.getElementById('max-hp').value)||100;
+  await fetch('/api/castle/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,keyword:document.getElementById('keyword').value.trim(),maxHP})});
+  document.getElementById('status-badge').textContent='📝 تسجيل';
+  document.getElementById('status-badge').classList.add('active');
+  document.getElementById('r-hp').textContent=maxHP;document.getElementById('b-hp').textContent=maxHP;
+  document.getElementById('r-hp-fill').style.width='100%';document.getElementById('b-hp-fill').style.width='100%';
+  document.getElementById('r-atk').textContent='0';document.getElementById('b-atk').textContent='0';
+  document.getElementById('r-players').textContent='0';document.getElementById('b-players').textContent='0';
+}
+async function lockReg(){
+  await fetch('/api/castle/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  document.getElementById('status-badge').textContent='🔒 جاهز';
+}
+async function startBattle(){
+  await fetch('/api/castle/battle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  document.getElementById('status-badge').textContent='⚔️ معركة!';
+}
+async function stopGame(){
+  await fetch('/api/castle/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  document.getElementById('status-badge').textContent='متوقف';
+  document.getElementById('status-badge').classList.remove('active');
+}
+
+socket.on('castle:joined',function(d){
+  document.getElementById('r-players').textContent=d.redCount;
+  document.getElementById('b-players').textContent=d.blueCount;
+});
+socket.on('castle:locked',function(){document.getElementById('status-badge').textContent='🔒 جاهز';});
+socket.on('castle:attack',function(d){
+  maxHP=d.maxHP||100;
+  document.getElementById('r-hp').textContent=d.redHP;
+  document.getElementById('b-hp').textContent=d.blueHP;
+  document.getElementById('r-hp-fill').style.width=Math.max(0,d.redHP/maxHP*100)+'%';
+  document.getElementById('b-hp-fill').style.width=Math.max(0,d.blueHP/maxHP*100)+'%';
+  document.getElementById('r-atk').textContent=d.redAttacks;
+  document.getElementById('b-atk').textContent=d.blueAttacks;
+});
+socket.on('castle:finish',function(d){
+  var name=d.winner==='red'?'🔴 الأحمر':'🔵 الأزرق';
+  document.getElementById('status-badge').textContent='🏆 '+name+' فاز!';
+});
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

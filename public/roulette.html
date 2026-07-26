@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الروليت الروسي - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root{--bg:#0d0d14;--surface:#181824;--surface2:#242436;--border:#2d2d40;--text:#f0f0f5;--muted:#9a9ab0;--red:#ef4444;--green:#22c55e;--gold:#fbbf24}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;padding:20px;min-height:100vh}
+  .wrap{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--surface);border-radius:12px}
+  .header h1{font-size:22px}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--muted)}
+  .badge.active{background:var(--red);color:#fff}
+  .card{background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--border)}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--red)}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px}
+  .btn{padding:11px 16px;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px}
+  .actions{display:flex;gap:8px}
+  .player-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface2);border-radius:8px;margin-bottom:3px;font-size:13px}
+  .player-item.dead{opacity:.3;text-decoration:line-through}
+  .empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
+  .overlay-link{background:var(--surface2);padding:10px;border-radius:8px;font-family:monospace;font-size:12px;word-break:break-all;cursor:pointer}
+  .spin-btn{background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;font-size:20px;padding:16px;width:100%;border:none;border-radius:12px;cursor:pointer;font-family:inherit;font-weight:900;transition:transform .15s}
+  .spin-btn:hover{transform:scale(1.02)}
+  .spin-btn:active{transform:scale(.98)}
+  .log{max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:3px}
+  .log-item{padding:5px 10px;background:var(--surface2);border-radius:6px;font-size:12px;color:var(--red)}
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>☠️ الروليت الروسي</h1><span class="badge" id="status-badge">متوقف</span></div>
+
+  <div class="card">
+    <div class="card-title">📝 التسجيل</div>
+    <div class="row3">
+      <div class="field"><label>كلمة التسجيل</label><input type="text" id="keyword" value="روليت"></div>
+      <div class="field"><label>الحد الأقصى</label><input type="number" id="max-players" value="6" min="3" max="20"></div>
+      <div style="display:flex;align-items:flex-end;gap:6px;padding-bottom:12px">
+        <button class="btn" onclick="openReg()" style="flex:1;background:var(--green);color:#fff">📝 فتح</button>
+        <button class="btn" onclick="lockReg()" style="flex:1;background:var(--red);color:#fff">🔒 قفل</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="text-align:center">
+    <button class="spin-btn" onclick="spin()">🔫 اسحب!</button>
+    <button class="btn" onclick="stopGame()" style="width:100%;margin-top:8px;background:#374151;color:#e8eaf2;padding:10px;border:none;border-radius:10px;cursor:pointer;font-family:inherit;font-weight:900">⏹ إيقاف الفعالية</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👥 اللاعبين (<span id="alive-count">0</span> باقي / <span id="total-count">0</span>)</div>
+    <div id="player-list"><div class="empty">لا يوجد لاعبين</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💀 سجل الخروج</div>
+    <div class="log" id="log"><div class="empty">لم يطلع أحد بعد</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 رابط الـ Overlay</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="overlay-link" id="overlay-link" style="flex:1">—</div>
+      <button class="btn" onclick="copyLink()" style="background:var(--red);color:#fff;padding:10px 16px;font-size:13px">📋 نسخ</button>
+    </div>
+  </div>
+</div>
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();if(username)socket.emit('join',{username});
+document.getElementById('overlay-link').textContent=location.origin+'/roulette-overlay.html?username='+username;
+function copyLink(){navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);}
+
+var players=[];
+
+async function openReg(){
+  await fetch('/api/roulette/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,keyword:document.getElementById('keyword').value.trim(),maxPlayers:parseInt(document.getElementById('max-players').value)||6})});
+  document.getElementById('status-badge').textContent='📝 تسجيل';
+  document.getElementById('status-badge').classList.add('active');
+  players=[];
+  document.getElementById('player-list').innerHTML='<div class="empty">بانتظار اللاعبين...</div>';
+  document.getElementById('log').innerHTML='<div class="empty">لم يطلع أحد بعد</div>';
+  document.getElementById('alive-count').textContent='0';
+  document.getElementById('total-count').textContent='0';
+}
+
+async function lockReg(){
+  await fetch('/api/roulette/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  document.getElementById('status-badge').textContent='🔒 جاهز';
+}
+
+async function spin(){
+  var res=await fetch('/api/roulette/spin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  var data=await res.json();
+  if(!data.ok)return;
+  document.getElementById('status-badge').textContent='🔫 الجولة '+data.aliveCount+' باقي';
+}
+
+socket.on('roulette:joined',function(d){
+  players.push({name:d.player,avatar:d.avatar,alive:true});
+  document.getElementById('alive-count').textContent=d.count;
+  document.getElementById('total-count').textContent=d.count;
+  renderPlayers();
+});
+
+socket.on('roulette:result',function(d){
+  players.forEach(function(p){if(p.name===d.victim.name)p.alive=false;});
+  document.getElementById('alive-count').textContent=d.aliveCount;
+  renderPlayers();
+  // Log
+  var log=document.getElementById('log');
+  if(log.querySelector('.empty'))log.innerHTML='';
+  var div=document.createElement('div');div.className='log-item';
+  div.textContent='💀 الجولة '+d.round+': '+d.victim.name+' طلع!';
+  log.prepend(div);
+  if(d.winner){
+    document.getElementById('status-badge').textContent='🏆 '+d.winner.name+' فاز!';
+    var w=document.createElement('div');w.className='log-item';w.style.color='#22c55e';
+    w.textContent='🏆 '+d.winner.name+' الناجي الوحيد!';
+    log.prepend(w);
+  }
+});
+
+socket.on('roulette:locked',function(d){
+  document.getElementById('status-badge').textContent='🔒 جاهز — '+d.count+' لاعب';
+});
+
+socket.on('roulette:stopped',function(){
+  document.getElementById('status-badge').textContent='متوقف';
+  document.getElementById('status-badge').classList.remove('active');
+});
+
+async function stopGame(){
+  await fetch('/api/roulette/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+}
+
+// استعادة الحالة عند فتح الصفحة
+if(username){
+  fetch('/api/roulette/'+username).then(function(r){return r.json();}).then(function(d){
+    if(!d||(!d.players||!d.players.length)&&!d.active)return;
+    players=(d.players||[]).map(function(p){return{name:p.name,avatar:p.avatar,alive:p.alive};});
+    renderPlayers();
+    var aliveN=players.filter(function(p){return p.alive;}).length;
+    document.getElementById('alive-count').textContent=aliveN;
+    document.getElementById('total-count').textContent=players.length;
+    if(d.keyword)document.getElementById('keyword').value=d.keyword;
+    var badge=document.getElementById('status-badge');
+    if(d.active&&d.phase==='register'){badge.textContent='📝 تسجيل';badge.classList.add('active');}
+    else if(d.active&&d.phase!=='idle'){badge.textContent='🔒 جاهز — الجولة '+d.round;badge.classList.add('active');}
+    var log=document.getElementById('log');
+    if((d.eliminated||[]).length){
+      log.innerHTML='';
+      d.eliminated.forEach(function(e){
+        var div=document.createElement('div');div.className='log-item';
+        div.textContent='💀 الجولة '+e.round+': '+e.name+' طلع!';
+        log.prepend(div);
+      });
+    }
+  });
+}
+
+function renderPlayers(){
+  var el=document.getElementById('player-list');
+  if(!players.length){el.innerHTML='<div class="empty">لا يوجد لاعبين</div>';return;}
+  el.innerHTML=players.map(function(p){
+    return '<div class="player-item '+(p.alive?'':'dead')+'"><span>'+(p.alive?'✅':'💀')+'</span><span style="flex:1;font-weight:700">'+esc(p.name)+'</span></div>';
+  }).join('');
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

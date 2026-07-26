@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سباق الخيل - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root{--bg:#0d0d14;--surface:#181824;--surface2:#242436;--border:#2d2d40;--text:#f0f0f5;--muted:#9a9ab0;--purple:#a855f7;--red:#ef4444;--green:#22c55e;--gold:#fbbf24;--blue:#3b82f6}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;padding:20px;min-height:100vh}
+  .wrap{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--surface);border-radius:12px}
+  .header h1{font-size:22px}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--muted)}
+  .badge.active{background:var(--purple);color:#fff}
+  .card{background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--border)}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--purple)}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px}
+  .btn{padding:11px 16px;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px}
+  .actions{display:flex;gap:8px}
+  .stats-cards{display:flex;gap:10px}
+  .stat-card{flex:1;background:var(--surface2);border-radius:10px;padding:12px;text-align:center}
+  .stat-card-icon{font-size:20px}
+  .stat-card-num{font-size:22px;font-weight:900;margin:4px 0}
+  .stat-card-label{font-size:10px;color:var(--muted)}
+  .progress-track{margin-top:8px;height:8px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+  .progress-fill{height:100%;border-radius:4px;transition:width .3s}
+  .overlay-link{background:var(--surface2);padding:10px;border-radius:8px;font-family:monospace;font-size:12px;word-break:break-all;cursor:pointer}
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>🏁 سباق الخيل</h1><span class="badge" id="status-badge">متوقف</span></div>
+
+  <div class="card">
+    <div class="card-title">⚙️ الإعدادات</div>
+    <div class="field"><label>خط النهاية (عدد التعليقات للفوز)</label><input type="number" id="finish-line" value="50" min="10" max="500"></div>
+    <div class="actions">
+      <button class="btn" onclick="startRegister()" style="flex:1;background:var(--purple);color:#fff">📝 فتح التسجيل</button>
+      <button class="btn" onclick="lockReg()" style="flex:1;background:var(--red);color:#fff">🔒 إيقاف التسجيل</button>
+      <button class="btn" onclick="startRace()" style="flex:1;background:var(--green);color:#fff;font-size:16px">🏁 ابدأ السباق!</button>
+      <button class="btn" onclick="stopRace()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted)">⏹</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 الفرق</div>
+    <div class="stats-cards" id="stats-cards">
+      <div class="stat-card" style="border-top:3px solid #ef4444"><div class="stat-card-icon">🔴</div><div class="stat-card-num" id="p-1">0</div><div class="stat-card-label">لاعب</div><div class="progress-track"><div class="progress-fill" id="pf-1" style="width:0%;background:#ef4444"></div></div><div style="font-size:11px;color:var(--muted);margin-top:4px" id="pr-1">0</div></div>
+      <div class="stat-card" style="border-top:3px solid #3b82f6"><div class="stat-card-icon">🔵</div><div class="stat-card-num" id="p-2">0</div><div class="stat-card-label">لاعب</div><div class="progress-track"><div class="progress-fill" id="pf-2" style="width:0%;background:#3b82f6"></div></div><div style="font-size:11px;color:var(--muted);margin-top:4px" id="pr-2">0</div></div>
+      <div class="stat-card" style="border-top:3px solid #22c55e"><div class="stat-card-icon">🟢</div><div class="stat-card-num" id="p-3">0</div><div class="stat-card-label">لاعب</div><div class="progress-track"><div class="progress-fill" id="pf-3" style="width:0%;background:#22c55e"></div></div><div style="font-size:11px;color:var(--muted);margin-top:4px" id="pr-3">0</div></div>
+      <div class="stat-card" style="border-top:3px solid #fbbf24"><div class="stat-card-icon">🟡</div><div class="stat-card-num" id="p-4">0</div><div class="stat-card-label">لاعب</div><div class="progress-track"><div class="progress-fill" id="pf-4" style="width:0%;background:#fbbf24"></div></div><div style="font-size:11px;color:var(--muted);margin-top:4px" id="pr-4">0</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 رابط الـ Overlay</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="overlay-link" id="overlay-link" style="flex:1">—</div>
+      <button class="btn" onclick="copyLink()" style="background:var(--purple);color:#fff;padding:10px 16px;font-size:13px">📋 نسخ</button>
+    </div>
+  </div>
+</div>
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();if(username)socket.emit('join',{username});
+document.getElementById('overlay-link').textContent=location.origin+'/horse-race-overlay.html?username='+username;
+function copyLink(){navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);}
+
+var finishLine=50;
+var NAMES=['','أحمر','أزرق','أخضر','أصفر'];
+
+async function startRegister(){
+  finishLine=parseInt(document.getElementById('finish-line').value)||50;
+  await fetch('/api/horse/start-register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,finishLine})});
+  document.getElementById('status-badge').textContent='📝 تسجيل';
+  document.getElementById('status-badge').classList.add('active');
+  for(var i=1;i<=4;i++){document.getElementById('p-'+i).textContent='0';document.getElementById('pf-'+i).style.width='0%';document.getElementById('pr-'+i).textContent='0';}
+}
+
+async function lockReg(){
+  await fetch('/api/horse/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  document.getElementById('status-badge').textContent='🔒 جاهز';
+}
+
+async function startRace(){
+  await fetch('/api/horse/start-race',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  document.getElementById('status-badge').textContent='🏁 سباق!';
+}
+
+async function stopRace(){
+  await fetch('/api/horse/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  document.getElementById('status-badge').textContent='متوقف';
+  document.getElementById('status-badge').classList.remove('active');
+}
+
+socket.on('horse:joined',function(d){
+  for(var i=1;i<=4;i++)document.getElementById('p-'+i).textContent=d.teamCounts[i]||0;
+});
+socket.on('horse:locked',function(){document.getElementById('status-badge').textContent='🔒 جاهز';});
+
+socket.on('horse:move',function(d){
+  finishLine=d.finishLine||50;
+  for(var i=1;i<=4;i++){
+    var pct=Math.min(100,(d.progress[i]||0)/finishLine*100);
+    document.getElementById('pf-'+i).style.width=pct+'%';
+    document.getElementById('pr-'+i).textContent=(d.progress[i]||0)+' / '+finishLine;
+  }
+});
+
+socket.on('horse:finish',function(d){
+  document.getElementById('status-badge').textContent='🏆 '+NAMES[d.winner]+' فاز!';
+});
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

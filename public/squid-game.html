@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🦑 لعبة الحبار — فعاليات تيك توك</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root{
+  --bg:#06060b;--card:#0c0c16;--card2:#10101e;--card3:#161628;--border:#1c1c2e;
+  --accent2:#22d3ee;--gold:#f5c542;--text:#e8eaf2;--muted:#8a8fa3;
+  --green:#22c55e;--red:#ef4444;--pink:#ff5f8f
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;min-height:100vh;padding:18px 12px 60px}
+
+.btn{font-family:inherit;font-weight:900;border:none;border-radius:12px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:active{transform:scale(.95)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-success{background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;padding:10px 20px;font-size:.88rem}
+.btn-danger{background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;padding:10px 20px;font-size:.88rem}
+.btn-warn{background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;padding:10px 20px;font-size:.88rem}
+.btn-pink{background:linear-gradient(135deg,#db2777,#ff5f8f);color:#fff;padding:10px 20px;font-size:.88rem}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text);padding:9px 16px;font-size:.82rem}
+.btn-ghost:hover{border-color:var(--accent2)}
+.btn-sm{padding:6px 12px;font-size:.75rem;border-radius:9px}
+
+.input{background:var(--card3);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:10px;font-family:inherit;font-size:.82rem;outline:none;width:100%}
+.input:focus{border-color:var(--accent2)}
+.field-label{display:block;font-size:.72rem;color:var(--muted);font-weight:700;margin-bottom:4px}
+
+.topnav{max-width:900px;margin:0 auto 14px;display:flex;align-items:center;justify-content:space-between}
+.topnav a{color:var(--accent2);text-decoration:none;font-weight:900;font-size:.8rem;border:1px solid var(--border);padding:7px 14px;border-radius:30px;background:var(--card)}
+.status-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:.72rem;font-weight:900;background:rgba(125,125,125,.1);border:1px solid #444;color:#999}
+.status-badge.live{background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.4);color:#86efac}
+.status-badge.red{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:#fca5a5}
+
+.wrap{max-width:900px;margin:0 auto;display:grid;grid-template-columns:1fr 320px;gap:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
+.card h4{font-size:.85rem;font-weight:900;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.card .desc{font-size:.72rem;color:var(--muted);line-height:1.8;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:12px}
+
+/* الضوء الكبير */
+.light-stage{background:linear-gradient(145deg,#1a0d18,var(--card));border:1px solid var(--border);border-radius:16px;padding:22px;text-align:center;margin-bottom:14px;position:relative;overflow:hidden}
+.doll{font-size:3rem;transition:transform .25s;display:inline-block;filter:drop-shadow(0 4px 10px rgba(0,0,0,.6))}
+.doll.watching{transform:scaleX(-1)}
+.light-label{font-size:1.5rem;font-weight:900;margin:8px 0}
+.light-label.g{color:#86efac;text-shadow:0 0 18px rgba(34,197,94,.6)}
+.light-label.r{color:#fca5a5;text-shadow:0 0 18px rgba(239,68,68,.6)}
+.light-btns{display:flex;gap:10px;justify-content:center;margin-top:12px}
+.light-btn{flex:1;max-width:180px;padding:18px 10px;font-size:1.05rem;border-radius:14px}
+.light-btn.g{background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;box-shadow:0 0 20px rgba(34,197,94,.3)}
+.light-btn.r{background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;box-shadow:0 0 20px rgba(239,68,68,.3)}
+.light-stage.is-red{background:linear-gradient(145deg,#2a0a10,var(--card))}
+.light-stage.is-green{background:linear-gradient(145deg,#0a2013,var(--card))}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+
+/* اللاعبين */
+.pl-list{display:flex;flex-direction:column;gap:5px;max-height:420px;overflow-y:auto}
+.pl{display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:6px 10px;font-size:.76rem}
+.pl.dead{opacity:.4;border-color:rgba(239,68,68,.3)}
+.pl.fin{border-color:rgba(245,197,66,.5);background:rgba(245,197,66,.06)}
+.pl .pav{width:26px;height:26px;border-radius:50%;overflow:hidden;background:var(--card3);display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:900;color:var(--muted);flex-shrink:0}
+.pl .pav img{width:100%;height:100%;object-fit:cover}
+.pl .pn{flex:1;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl .bar{flex:2;height:8px;background:var(--card3);border-radius:6px;overflow:hidden}
+.pl .bar i{display:block;height:100%;background:linear-gradient(90deg,#db2777,#ff5f8f);transition:width .3s}
+.pl .st{font-size:.64rem;color:var(--muted);min-width:44px;text-align:left;font-weight:900}
+.empty{text-align:center;color:var(--muted);padding:20px;font-size:.76rem;line-height:1.8}
+
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
+.stat b{display:block;font-size:1.4rem;font-weight:900}
+.stat span{font-size:.64rem;color:var(--muted);font-weight:700}
+
+.obs-link{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:.68rem;color:var(--accent2);display:flex;align-items:center;gap:8px;font-family:monospace}
+.obs-link b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:left;font-weight:400}
+
+@media(max-width:800px){.wrap{grid-template-columns:1fr}}
+@media(max-width:600px){
+  input,.input{font-size:16px !important}
+  body{padding:12px 8px 50px}
+  .grid4{grid-template-columns:repeat(2,1fr)}
+  .light-btn{padding:14px 8px}
+}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <a href="/admin.html">← لوحة الأدمن</a>
+  <span style="font-weight:900">🦑 لعبة الحبار <span class="status-badge" id="status-badge"><span id="status-txt">متوقف</span></span></span>
+</div>
+
+<div class="stats-row" style="max-width:900px;margin:0 auto 14px">
+  <div class="stat"><b id="s-alive" style="color:#86efac">0</b><span>على المضمار</span></div>
+  <div class="stat"><b id="s-fin" style="color:var(--gold)">0</b><span>وصلوا 🏆</span></div>
+  <div class="stat"><b id="s-dead" style="color:#fca5a5">0</b><span>انقصوا 💀</span></div>
+</div>
+
+<div class="wrap">
+
+  <div>
+    <!-- الضوء -->
+    <div class="light-stage" id="light-stage">
+      <div class="doll" id="doll">🎎</div>
+      <div class="light-label r" id="light-label">🔴 الضوء أحمر</div>
+      <div style="font-size:.7rem;color:var(--muted)" id="light-hint">اللاعبون متجمدون — أي رسالة = إقصاء</div>
+      <div class="light-btns">
+        <button class="btn light-btn g" onclick="setLight('green')">🟢 أخضر — تحركوا!</button>
+        <button class="btn light-btn r" onclick="setLight('red')">🔴 أحمر — تجمدوا!</button>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn btn-warn" id="auto-btn" onclick="toggleAuto()" style="width:100%">🤖 تشغيل التبديل التلقائي</button>
+      </div>
+    </div>
+
+    <!-- الإعدادات -->
+    <div class="card">
+      <h4>⚙️ الإعدادات</h4>
+      <div class="desc">💡 <b>الفكرة:</b> بالضوء الأخضر كل رسالة بالشات تقدّم اللاعب خطوة — وبالأحمر أي رسالة تقصيه فوراً! أول من يقطع كل الخطوات يفوز.</div>
+      <div class="grid2" style="margin-bottom:10px">
+        <div><label class="field-label">كلمة التسجيل</label><input class="input" id="keyword" value="حبار"></div>
+        <div><label class="field-label">أقصى عدد لاعبين</label><input class="input" type="number" id="max-players" value="30" min="2" max="100"></div>
+        <div><label class="field-label">خطوات الوصول</label><input class="input" type="number" id="finish-steps" value="20" min="5" max="100"></div>
+        <div><label class="field-label">عدد الفائزين (ينتهي عندهم)</label><input class="input" type="number" id="winners-count" value="3" min="1" max="10"></div>
+      </div>
+      <label class="field-label">⏱ مدد التبديل التلقائي (ثواني)</label>
+      <div class="grid4" style="margin-bottom:12px">
+        <div><label class="field-label">🟢 أدنى</label><input class="input" type="number" id="min-green" value="4" min="1" max="30" step="0.5"></div>
+        <div><label class="field-label">🟢 أقصى</label><input class="input" type="number" id="max-green" value="8" min="1" max="30" step="0.5"></div>
+        <div><label class="field-label">🔴 أدنى</label><input class="input" type="number" id="min-red" value="3" min="1" max="30" step="0.5"></div>
+        <div><label class="field-label">🔴 أقصى</label><input class="input" type="number" id="max-red" value="6" min="1" max="30" step="0.5"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-success" style="flex:1" onclick="openReg()">📝 فتح التسجيل</button>
+        <button class="btn btn-pink" style="flex:1" onclick="startGame()">🚦 ابدأ اللعبة</button>
+        <button class="btn btn-danger" onclick="stopGame()">⏹ إيقاف</button>
+      </div>
+    </div>
+
+    <div class="card" style="padding:12px 16px">
+      <h4>🔗 رابط الـ Overlay لـ OBS</h4>
+      <div class="obs-link"><b id="overlay-link">—</b><button class="btn btn-sm btn-ghost" onclick="copyLink()">نسخ</button></div>
+    </div>
+  </div>
+
+  <!-- اللاعبين -->
+  <div>
+    <div class="card">
+      <h4>👥 اللاعبون <span style="margin-right:auto;font-size:.68rem;color:var(--muted)" id="pl-count">0</span></h4>
+      <div class="pl-list" id="pl-list"><div class="empty">افتح التسجيل وخل الجمهور يكتبون كلمة الدخول</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();if(username)socket.emit('join',{username});
+document.getElementById('overlay-link').textContent=location.origin+'/squid-overlay.html?username='+username;
+function copyLink(){navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);var el=document.getElementById('overlay-link');el.style.color='#22c55e';setTimeout(function(){el.style.color='';},1200);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+var players={}; // name -> {avatar, steps, alive, finished}
+var finishSteps=20, autoOn=false;
+
+function post(path,body){return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({username:username},body||{}))}).then(function(r){return r.json();});}
+
+function setBadge(cls,txt){var b=document.getElementById('status-badge');b.className='status-badge '+(cls||'');document.getElementById('status-txt').textContent=txt;}
+
+function renderLight(color){
+  var stage=document.getElementById('light-stage'),lbl=document.getElementById('light-label'),doll=document.getElementById('doll'),hint=document.getElementById('light-hint');
+  stage.classList.toggle('is-red',color==='red');
+  stage.classList.toggle('is-green',color==='green');
+  doll.classList.toggle('watching',color==='red');
+  if(color==='green'){lbl.className='light-label g';lbl.textContent='🟢 الضوء أخضر';hint.textContent='الجمهور يكتبون بالشات — كل رسالة خطوة للأمام';}
+  else{lbl.className='light-label r';lbl.textContent='🔴 الضوء أحمر';hint.textContent='اللاعبون متجمدون — أي رسالة = إقصاء 💀';}
+}
+
+async function openReg(){
+  players={};renderPlayers();
+  var r=await post('/api/squid/register',{
+    keyword:document.getElementById('keyword').value.trim()||'حبار',
+    maxPlayers:parseInt(document.getElementById('max-players').value)||30,
+    finishSteps:parseInt(document.getElementById('finish-steps').value)||20,
+    winnersCount:parseInt(document.getElementById('winners-count').value)||3,
+  });
+  if(r.ok){setBadge('live','📝 تسجيل مفتوح');finishSteps=parseInt(document.getElementById('finish-steps').value)||20;}
+}
+
+async function startGame(){
+  var r=await post('/api/squid/start',{
+    auto:autoOn,
+    minGreen:parseFloat(document.getElementById('min-green').value)||4,
+    maxGreen:parseFloat(document.getElementById('max-green').value)||8,
+    minRed:parseFloat(document.getElementById('min-red').value)||3,
+    maxRed:parseFloat(document.getElementById('max-red').value)||6,
+  });
+  if(r.ok)setBadge('live','🚦 اللعبة شغالة');
+  else if(r.message)alert(r.message);
+}
+
+async function setLight(color){
+  if(autoOn)toggleAutoUI(false);
+  await post('/api/squid/light',{color:color});
+}
+
+function toggleAutoUI(on){
+  autoOn=on;
+  var btn=document.getElementById('auto-btn');
+  btn.textContent=on?'🤖 إيقاف التبديل التلقائي':'🤖 تشغيل التبديل التلقائي';
+  btn.className='btn '+(on?'btn-danger':'btn-warn');
+  btn.style.width='100%';
+}
+async function toggleAuto(){
+  toggleAutoUI(!autoOn);
+  await post('/api/squid/auto',{on:autoOn,
+    minGreen:parseFloat(document.getElementById('min-green').value)||4,
+    maxGreen:parseFloat(document.getElementById('max-green').value)||8,
+    minRed:parseFloat(document.getElementById('min-red').value)||3,
+    maxRed:parseFloat(document.getElementById('max-red').value)||6});
+}
+
+async function stopGame(){
+  await post('/api/squid/stop');
+  setBadge('','متوقف');
+  toggleAutoUI(false);
+}
+
+function renderPlayers(){
+  var list=document.getElementById('pl-list');
+  var names=Object.keys(players);
+  document.getElementById('pl-count').textContent=names.length+' لاعب';
+  var alive=0,fin=0,dead=0;
+  names.forEach(function(n){var p=players[n];if(p.finished)fin++;else if(!p.alive)dead++;else alive++;});
+  document.getElementById('s-alive').textContent=alive;
+  document.getElementById('s-fin').textContent=fin;
+  document.getElementById('s-dead').textContent=dead;
+  if(!names.length){list.innerHTML='<div class="empty">افتح التسجيل وخل الجمهور يكتبون كلمة الدخول</div>';return;}
+  var sorted=names.sort(function(a,b){return (players[b].steps||0)-(players[a].steps||0);});
+  list.innerHTML=sorted.map(function(n){
+    var p=players[n];
+    var cls=p.finished?'fin':(!p.alive?'dead':'');
+    var pct=Math.min(100,(p.steps||0)/finishSteps*100);
+    var st=p.finished?'🏆':(!p.alive?'💀':(p.steps||0)+'/'+finishSteps);
+    var avInner=p.avatar?'<img src="'+esc(p.avatar)+'" onerror="this.parentElement.textContent=\''+esc(n[0])+'\'">':esc(n[0]);
+    return '<div class="pl '+cls+'"><div class="pav">'+avInner+'</div><span class="pn">'+esc(n)+'</span><div class="bar"><i style="width:'+pct+'%"></i></div><span class="st">'+st+'</span></div>';
+  }).join('');
+}
+
+socket.on('squid:joined',function(d){players[d.player]={avatar:d.avatar,steps:0,alive:true,finished:false};renderPlayers();setBadge('live','📝 '+d.count+'/'+d.max);});
+socket.on('squid:light',function(d){renderLight(d.light);});
+socket.on('squid:step',function(d){if(players[d.player]){players[d.player].steps=d.steps;renderPlayers();}});
+socket.on('squid:eliminated',function(d){if(players[d.player]){players[d.player].alive=false;renderPlayers();}});
+socket.on('squid:finished',function(d){if(players[d.player]){players[d.player].finished=true;renderPlayers();}});
+socket.on('squid:end',function(d){setBadge('red','🏁 انتهت — '+(d.winners||[]).length+' فائز');toggleAutoUI(false);});
+socket.on('squid:stopped',function(){setBadge('','متوقف');toggleAutoUI(false);});
+
+// استعادة الحالة
+if(username){
+  fetch('/api/squid/'+username).then(function(r){return r.json();}).then(function(d){
+    if(!d.active&&!(d.players||[]).length)return;
+    finishSteps=d.finishSteps||20;
+    document.getElementById('keyword').value=d.keyword||'حبار';
+    document.getElementById('finish-steps').value=d.finishSteps||20;
+    document.getElementById('max-players').value=d.maxPlayers||30;
+    document.getElementById('winners-count').value=d.winnersCount||3;
+    (d.players||[]).forEach(function(p){players[p.name]={avatar:p.avatar,steps:p.steps,alive:p.alive,finished:p.finished};});
+    renderPlayers();
+    renderLight(d.light||'red');
+    toggleAutoUI(!!d.auto);
+    if(d.phase==='register')setBadge('live','📝 تسجيل مفتوح');
+    else if(d.phase==='playing')setBadge('live','🚦 اللعبة شغالة');
+    else if(d.phase==='ended')setBadge('red','🏁 انتهت');
+  });
+}
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

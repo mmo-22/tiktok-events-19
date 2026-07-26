@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐎 سباق الخيل</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent !important;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center}
+
+.main{position:relative;width:min(96vw,660px);aspect-ratio:16/10;opacity:0;transition:opacity .2s}
+.main.show{opacity:1}
+.scene{position:absolute;inset:0;border-radius:18px;overflow:hidden;border:2px solid rgba(168,85,247,.35);
+  background:linear-gradient(#0a1228 0%,#0a1228 28%,#173017 30%,#1d3a1b 100%);box-shadow:0 0 30px rgba(0,0,0,.6)}
+
+/* السماء */
+.sky{position:absolute;top:0;left:0;right:0;height:28%;overflow:hidden}
+.moon{position:absolute;top:12px;left:30px;width:34px;height:34px;border-radius:50%;background:#f5f0d8;box-shadow:0 0 30px rgba(245,240,216,.5)}
+.star{position:absolute;width:2px;height:2px;background:#fff;border-radius:50%;opacity:.6;animation:tw 2.4s infinite}
+@keyframes tw{50%{opacity:.15}}
+.crowd{position:absolute;top:28%;left:0;right:0;height:7%;background:repeating-linear-gradient(90deg,#241c33 0 8px,#2e2344 8px 16px);border-bottom:2px solid #000}
+
+/* المضمار */
+.track{position:absolute;top:35%;bottom:0;left:0;right:0}
+.lane{position:absolute;left:0;right:0;height:16%;border-bottom:2px dashed rgba(255,255,255,.12)}
+.finish{position:absolute;left:6%;top:0;bottom:0;width:10px;background:repeating-conic-gradient(#fff 0 25%,#000 0 50%) 0 0/10px 10px;opacity:.9}
+.horse{position:absolute;right:2%;font-size:1.7rem;transition:right .28s linear;filter:drop-shadow(0 3px 4px rgba(0,0,0,.6));transform:scaleX(-1)}
+.horse.run{animation:gallop .3s infinite}
+@keyframes gallop{0%,100%{transform:translateY(0) scaleX(-1)}50%{transform:translateY(-5px) scaleX(-1)}}
+.h-tag{position:absolute;top:-15px;right:4px;font-size:.55rem;font-weight:900;background:#0c0c16dd;border-radius:8px;padding:1px 7px;transform:scaleX(-1);white-space:nowrap}
+.h-cnt{position:absolute;bottom:-13px;right:8px;font-size:.52rem;font-weight:900;color:rgba(255,255,255,.55);background:#0c0c16aa;border-radius:6px;padding:0 5px;transform:scaleX(-1)}
+
+/* HUD */
+.h-rank{position:absolute;top:8px;right:10px;background:#0c0c16dd;border:1px solid #f5c542;color:#f5c542;border-radius:12px;padding:4px 14px;font-weight:900;font-size:.8rem;z-index:5}
+.phase-label{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;font-size:.74rem;color:#fbbf24;font-weight:900;background:#0c0c16cc;border-radius:12px;padding:4px 14px;white-space:nowrap}
+
+/* التسجيل */
+.reg-panel{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);z-index:8;text-align:center;display:none;
+  background:#0c0c16e6;border:2px solid rgba(245,197,66,.4);border-radius:16px;padding:12px 20px;box-shadow:0 0 24px rgba(0,0,0,.5)}
+.reg-panel.show{display:block;animation:popIn .35s cubic-bezier(.2,1.5,.4,1)}
+@keyframes popIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.reg-info{font-size:.82rem;color:rgba(255,255,255,.75);font-weight:900;margin-bottom:8px}
+.reg-info strong{color:#f5c542}
+.team-counts{display:flex;justify-content:center;gap:14px;margin-bottom:8px}
+.tc{text-align:center;font-size:.72rem}
+.tc-num{font-size:1.1rem;font-weight:900;color:#fff}
+.reg-slots{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;max-height:36px;overflow:hidden;max-width:280px}
+
+.winner-overlay{position:absolute;inset:0;background:rgba(4,8,18,.88);backdrop-filter:blur(10px);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.winner-overlay.show{display:flex;animation:winIn .5s ease}
+.winner-icon{font-size:3.4rem;margin-bottom:8px;animation:gallop2 .4s infinite}
+@keyframes gallop2{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.winner-text{font-size:1.7rem;font-weight:900;color:#fff}
+.winner-sub{font-size:.85rem;color:rgba(255,255,255,.5);margin-top:4px;font-weight:900}
+@keyframes winIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+
+.confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:11}
+</style>
+</head>
+<body>
+<div class="main" id="box">
+  <div class="scene">
+    <div class="sky" id="sky"><div class="moon"></div></div>
+    <div class="crowd"></div>
+    <div class="h-rank" id="h-rank">🏁 جاهز</div>
+    <div class="phase-label" id="phase-label"></div>
+    <div class="track" id="track">
+      <div class="finish"></div>
+    </div>
+    <div class="reg-panel" id="reg-panel">
+      <div class="reg-info" id="reg-info">اكتب <strong>1</strong> أو <strong>2</strong> أو <strong>3</strong> أو <strong>4</strong> عشان تختار فريقك!</div>
+      <div class="team-counts">
+        <div class="tc">🔴<div class="tc-num" id="tc-1">0</div></div>
+        <div class="tc">🔵<div class="tc-num" id="tc-2">0</div></div>
+        <div class="tc">🟢<div class="tc-num" id="tc-3">0</div></div>
+        <div class="tc">🟡<div class="tc-num" id="tc-4">0</div></div>
+      </div>
+      <div class="reg-slots" id="reg-slots"></div>
+    </div>
+    <div class="winner-overlay" id="winner-overlay">
+      <div class="winner-icon" id="w-icon">🏆</div>
+      <div class="winner-text" id="w-text"></div>
+      <div class="winner-sub">فاز بالسباق! 🏆</div>
+    </div>
+    <div class="confetti" id="confetti"></div>
+  </div>
+</div>
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();if(username)socket.emit('join',{username});
+var finishLine=50;
+var COLORS=['','#ef4444','#3b82f6','#22c55e','#fbbf24'];
+var ICONS=['','🔴','🔵','🟢','🟡'];
+var NAMES=['','أحمر','أزرق','أخضر','أصفر'];
+
+/* بناء الحارات والخيل */
+(function buildTrack(){
+  var tr=document.getElementById('track');
+  for(var i=1;i<=4;i++){
+    var lane=document.createElement('div');
+    lane.className='lane';lane.style.top=((i-1)*20+4)+'%';
+    tr.appendChild(lane);
+    var h=document.createElement('div');
+    h.className='horse';h.id='horse-'+i;
+    h.innerHTML='🐎<span class="h-tag" style="color:'+COLORS[i]+'">'+ICONS[i]+' '+NAMES[i]+'</span><span class="h-cnt" id="cnt-'+i+'">0</span>';
+    h.style.top=((i-1)*20+2)+'%';h.style.right='2%';
+    tr.appendChild(h);
+  }
+  // نجوم بالسماء
+  var sky=document.getElementById('sky');
+  for(var s=0;s<18;s++){
+    var d=document.createElement('div');d.className='star';
+    d.style.left=Math.random()*100+'%';d.style.top=Math.random()*80+'%';
+    d.style.animationDelay=(Math.random()*2)+'s';
+    sky.appendChild(d);
+  }
+})();
+
+function setHorsePos(i,progress){
+  var pct=Math.min(84,2+Math.max(0,progress)/finishLine*82);
+  document.getElementById('horse-'+i).style.right=pct+'%';
+}
+function setRunning(on){
+  for(var i=1;i<=4;i++)document.getElementById('horse-'+i).classList.toggle('run',on);
+}
+function resetHorses(){
+  for(var i=1;i<=4;i++){
+    document.getElementById('horse-'+i).style.right='2%';
+    document.getElementById('cnt-'+i).textContent='0';
+    document.getElementById('tc-'+i).textContent='0';
+  }
+  setRunning(false);
+}
+
+socket.on('horse:register',function(d){
+  document.getElementById('box').classList.add('show');
+  document.getElementById('winner-overlay').classList.remove('show');
+  document.getElementById('phase-label').textContent='📝 اختر فريقك!';
+  document.getElementById('h-rank').textContent='🏁 جاهز';
+  document.getElementById('reg-panel').classList.add('show');
+  document.getElementById('reg-slots').innerHTML='';
+  finishLine=d.finishLine||50;
+  resetHorses();
+});
+
+socket.on('horse:joined',function(d){
+  for(var i=1;i<=4;i++)document.getElementById('tc-'+i).textContent=d.teamCounts[i]||0;
+  var el=document.getElementById('reg-slots');
+  var div=document.createElement('div');
+  div.style.cssText='width:28px;height:28px;border-radius:50%;border:2px solid '+COLORS[d.team]+';overflow:hidden;animation:winIn .3s ease';
+  if(d.avatar){div.innerHTML='<img src="'+d.avatar+'" style="width:100%;height:100%;object-fit:cover">';}
+  else{div.style.cssText+=';display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.1);font-size:10px;color:rgba(255,255,255,.4)';div.textContent='✓';}
+  el.appendChild(div);
+});
+
+socket.on('horse:locked',function(d){
+  document.getElementById('reg-panel').classList.remove('show');
+  document.getElementById('phase-label').textContent='🔒 التسجيل مقفل — '+d.total+' لاعب';
+});
+
+socket.on('horse:race',function(d){
+  document.getElementById('phase-label').textContent='🏁 السباق بدأ! اكتب أي شيء!';
+  document.getElementById('reg-panel').classList.remove('show');
+  finishLine=d.finishLine||50;
+  setRunning(true);
+});
+
+socket.on('horse:move',function(d){
+  finishLine=d.finishLine||50;
+  var lead=1,leadV=-1;
+  for(var i=1;i<=4;i++){
+    var v=d.progress[i]||0;
+    setHorsePos(i,v);
+    document.getElementById('cnt-'+i).textContent=v;
+    if(v>leadV){leadV=v;lead=i;}
+  }
+  document.getElementById('h-rank').textContent='🥇 '+NAMES[lead];
+});
+
+socket.on('horse:finish',function(d){
+  setRunning(false);
+  document.getElementById('phase-label').textContent='🏆 انتهى السباق!';
+  document.getElementById('h-rank').textContent='🏆 فاز '+NAMES[d.winner]+'!';
+  document.getElementById('w-icon').textContent=ICONS[d.winner]||'🏆';
+  document.getElementById('w-text').textContent='الفريق '+NAMES[d.winner]+' فاز!';
+  document.getElementById('w-text').style.color=COLORS[d.winner];
+  document.getElementById('winner-overlay').classList.add('show');
+  fireConfetti();
+});
+
+socket.on('horse:stopped',function(){document.getElementById('box').classList.remove('show');setRunning(false);});
+
+var CC=['#ef4444','#3b82f6','#22c55e','#fbbf24','#a855f7','#ec4899'];
+function fireConfetti(){var layer=document.getElementById('confetti'),box=document.getElementById('box'),cx=box.offsetWidth/2,cy=box.offsetHeight/2;for(var i=0;i<40;i++){var p=document.createElement('div');p.style.cssText='position:absolute;width:7px;height:11px;left:'+cx+'px;top:'+cy+'px;background:'+CC[i%CC.length]+';border-radius:2px;';layer.appendChild(p);var a=Math.random()*Math.PI*2,d=80+Math.random()*220;p.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:'translate('+Math.cos(a)*d+'px,'+Math.sin(a)*d+'px) rotate('+(600+Math.random()*600)+'deg)',opacity:0}],{duration:1400+Math.random()*500,easing:'cubic-bezier(0.4,0,0.6,1)'});setTimeout(function(el){el.remove()}.bind(null,p),2000);}}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

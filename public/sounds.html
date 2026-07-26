@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sound Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #111118; --surface2: #1a1a24;
+    --border: rgba(255,255,255,0.08); --accent: #ff0050;
+    --accent2: #25f4ee; --text: #f0f0f5; --muted: #666;
+    --green: #1dba72; --amber: #f59e0b;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Tajawal',sans-serif; min-height:100vh; padding:24px 16px; }
+  .container { max-width: 600px; margin: 0 auto; }
+
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  h1 span { color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px 20px; margin-bottom: 12px;
+  }
+
+  .sound-row {
+    display: flex; align-items: center; gap: 12px; padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .sound-row:last-child { border-bottom: none; }
+
+  .sound-icon { font-size: 22px; width: 32px; text-align: center; flex-shrink: 0; }
+  .sound-label { flex: 1; }
+  .sound-name { font-size: 14px; font-weight: 600; }
+  .sound-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* Toggle */
+  .toggle {
+    position: relative; width: 38px; height: 22px; flex-shrink: 0;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 11px; cursor: pointer; transition: background .2s;
+  }
+  .toggle input:checked + .toggle-track { background: var(--accent2); border-color: var(--accent2); }
+  .toggle-thumb {
+    position: absolute; top: 3px; left: 3px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #fff; transition: transform .2s; pointer-events: none;
+  }
+  .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+
+  /* Volume slider */
+  .vol-wrap { display: flex; align-items: center; gap: 8px; width: 130px; flex-shrink: 0; }
+  .vol-wrap span { font-size: 11px; color: var(--muted); min-width: 28px; text-align: left; }
+  input[type=range] {
+    flex: 1; accent-color: var(--accent2); height: 4px;
+    cursor: pointer;
+  }
+
+  /* Test button */
+  .test-btn {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--muted); font-family: inherit; font-size: 12px;
+    padding: 4px 10px; border-radius: 6px; cursor: pointer;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .test-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* Priority order note */
+  .priority-note {
+    font-size: 12px; color: var(--muted);
+    background: var(--surface2); border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 12px;
+    border-right: 3px solid var(--accent2);
+  }
+
+  /* URL output */
+  .url-section { margin-top: 16px; }
+  .url-box {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+    font-family: monospace; font-size: 11px;
+    color: var(--accent2); word-break: break-all;
+    line-height: 1.6; min-height: 50px; margin-bottom: 10px;
+  }
+  .copy-btn {
+    background: var(--accent); color: #fff; border: none;
+    font-family: inherit; font-size: 14px; font-weight: 700;
+    padding: 10px; border-radius: 10px; cursor: pointer;
+    width: 100%; transition: opacity .15s;
+  }
+  .copy-btn:hover { opacity: .85; }
+  .copy-btn.copied { background: var(--green); }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 18px; border-radius: 10px;
+    font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔊 Sound <span>Control</span></h1>
+  <p class="subtitle">تحكم في أصوات كل حدث — الأصوات ذات الأولوية الأعلى لا تتداخل مع غيرها</p>
+
+  <div class="priority-note">
+    ترتيب الأولوية: دونيشن 🥇 ← هدية كبيرة 🥈 ← هدية عادية 🥉 ← متابعة ← انضمام
+  </div>
+
+  <div style="display:flex;gap:10px;margin-bottom:12px">
+    <button onclick="muteAllExceptDonation()" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:13px;font-weight:600;padding:10px;border-radius:10px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+      🔇 إيقاف كل الأصوات إلا الدونيشن
+    </button>
+    <button onclick="enableAll()" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:13px;font-weight:600;padding:10px;border-radius:10px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--accent2)'" onmouseout="this.style.borderColor='var(--border)'">
+      🔊 تفعيل كل الأصوات
+    </button>
+  </div>
+
+  <div class="card">
+    <div id="username-display" style="font-size:13px;color:var(--muted);margin-bottom:12px">أدخل يوزرنيم في الرابط: ?username=...</div>
+
+    <!-- Donation -->
+    <div class="sound-row">
+      <div class="sound-icon">💰</div>
+      <div class="sound-label">
+        <div class="sound-name">دونيشن / دعم خارجي</div>
+        <div class="sound-desc">أعلى أولوية — يوقف كل الأصوات الأخرى</div>
+      </div>
+      <button class="test-btn" onclick="testSound('donation')">تجربة</button>
+      <div class="vol-wrap">
+        <span id="lbl-donation">70%</span>
+        <input type="range" min="0" max="1" step="0.05" value="0.7" id="vol-donation" oninput="updateVol('donation',this.value)">
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="en-donation" checked onchange="update()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+    </div>
+
+    <!-- Big Gift -->
+    <div class="sound-row">
+      <div class="sound-icon">🎁✨</div>
+      <div class="sound-label">
+        <div class="sound-name">هدية كبيرة (+100 دايموند)</div>
+        <div class="sound-desc">لحن احتفالي صاعد</div>
+      </div>
+      <button class="test-btn" onclick="testSound('bigGift')">تجربة</button>
+      <div class="vol-wrap">
+        <span id="lbl-bigGift">80%</span>
+        <input type="range" min="0" max="1" step="0.05" value="0.8" id="vol-bigGift" oninput="updateVol('bigGift',this.value)">
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="en-bigGift" checked onchange="update()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+    </div>
+
+    <!-- Gift -->
+    <div class="sound-row">
+      <div class="sound-icon">🎁</div>
+      <div class="sound-label">
+        <div class="sound-name">هدية عادية</div>
+        <div class="sound-desc">نغمتان قصيرتان</div>
+      </div>
+      <button class="test-btn" onclick="testSound('gift')">تجربة</button>
+      <div class="vol-wrap">
+        <span id="lbl-gift">50%</span>
+        <input type="range" min="0" max="1" step="0.05" value="0.5" id="vol-gift" oninput="updateVol('gift',this.value)">
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="en-gift" checked onchange="update()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+    </div>
+
+    <!-- Follow -->
+    <div class="sound-row">
+      <div class="sound-icon">➕</div>
+      <div class="sound-label">
+        <div class="sound-name">متابعة</div>
+        <div class="sound-desc">نغمة خفيفة</div>
+      </div>
+      <button class="test-btn" onclick="testSound('follow')">تجربة</button>
+      <div class="vol-wrap">
+        <span id="lbl-follow">30%</span>
+        <input type="range" min="0" max="1" step="0.05" value="0.3" id="vol-follow" oninput="updateVol('follow',this.value)">
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="en-follow" checked onchange="update()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+    </div>
+
+    <!-- Join -->
+    <div class="sound-row">
+      <div class="sound-icon">👋</div>
+      <div class="sound-label">
+        <div class="sound-name">انضمام</div>
+        <div class="sound-desc">نغمة أخف</div>
+      </div>
+      <button class="test-btn" onclick="testSound('join')">تجربة</button>
+      <div class="vol-wrap">
+        <span id="lbl-join">20%</span>
+        <input type="range" min="0" max="1" step="0.05" value="0.2" id="vol-join" oninput="updateVol('join',this.value)">
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="en-join" checked onchange="update()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+    </div>
+  </div>
+
+  <div class="url-section">
+    <div class="url-box" id="url-out">أدخل يوزرنيم في الرابط أولاً...</div>
+    <button class="copy-btn" id="copy-btn" onclick="copyUrl()">📋 انسخ رابط OBS</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Audio ─────────────────────────────────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let ctx = null;
+function getCtx() { if (!ctx) ctx = new AudioCtx(); return ctx; }
+
+function playTone(freq, dur, type='sine', vol=0.3) {
+  try {
+    const c = getCtx();
+    const o = c.createOscillator(), g = c.createGain();
+    o.connect(g); g.connect(c.destination);
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+    o.start(); o.stop(c.currentTime + dur);
+  } catch(_) {}
+}
+
+function testSound(type) {
+  const v = parseFloat(document.getElementById(`vol-${type}`).value);
+  if (type === 'gift') {
+    playTone(600, 0.1, 'sine', v*0.6);
+    setTimeout(() => playTone(800, 0.15, 'sine', v*0.6), 120);
+  } else if (type === 'bigGift') {
+    playTone(523, 0.15, 'sine', v*0.8);
+    setTimeout(() => playTone(659, 0.15, 'sine', v*0.8), 150);
+    setTimeout(() => playTone(784, 0.15, 'sine', v*0.9), 300);
+    setTimeout(() => playTone(1047, 0.3, 'sine', v), 450);
+  } else if (type === 'follow') {
+    playTone(440, 0.08, 'sine', v*0.7);
+    setTimeout(() => playTone(550, 0.12, 'sine', v*0.7), 90);
+  } else if (type === 'join') {
+    playTone(350, 0.07, 'sine', v*0.5);
+    setTimeout(() => playTone(450, 0.1, 'sine', v*0.5), 80);
+  } else if (type === 'donation') {
+    playTone(400, 0.1, 'sine', v*0.6);
+    setTimeout(() => playTone(500, 0.1, 'sine', v*0.8), 120);
+    setTimeout(() => playTone(650, 0.1, 'sine', v*0.9), 240);
+    setTimeout(() => playTone(800, 0.2, 'sine', v), 360);
+    setTimeout(() => playTone(1000, 0.3, 'sine', v), 500);
+  }
+}
+
+function updateVol(type, val) {
+  document.getElementById(`lbl-${type}`).textContent = Math.round(val*100) + '%';
+  update();
+}
+
+// ── URL Builder ───────────────────────────────────────────
+const urlParams = new URLSearchParams(location.search);
+const username = urlParams.get('username') || urlParams.get('u') || '';
+
+if (username) {
+  document.getElementById('username-display').textContent = `@${username}`;
+}
+
+function update() {
+  if (!username) { document.getElementById('url-out').textContent = 'أدخل يوزرنيم في الرابط أولاً...'; return; }
+
+  const p = new URLSearchParams();
+  p.set('username', username);
+
+  const types = ['gift','bigGift','follow','join','donation'];
+  types.forEach(t => {
+    p.set(`sound${t.charAt(0).toUpperCase()+t.slice(1)}`, document.getElementById(`en-${t}`).checked ? '1' : '0');
+    p.set(`vol${t.charAt(0).toUpperCase()+t.slice(1)}`, document.getElementById(`vol-${t}`).value);
+  });
+
+  // Keep existing obs params if any
+  const obsParams = ['bgColor','fontColor','fontSize','fontFamily','usernameColor','bubbleBg',
+                     'dir','max','showChats','showGifts','showFollows','showJoins','showShares',
+                     'showStats','showViewers','showLikes','showDiamonds','showShareCount'];
+  obsParams.forEach(k => { const v = urlParams.get(k); if (v) p.set(k, v); });
+
+  document.getElementById('url-out').textContent = location.origin + '/obs.html?' + p.toString();
+}
+
+function copyUrl() {
+  const txt = document.getElementById('url-out').textContent;
+  if (txt.includes('أدخل')) return;
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = '✅ تم النسخ!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '📋 انسخ رابط OBS'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function muteAllExceptDonation() {
+  ['gift', 'bigGift', 'follow', 'join'].forEach(t => {
+    document.getElementById(`en-${t}`).checked = false;
+  });
+  document.getElementById('en-donation').checked = true;
+  update();
+}
+
+function enableAll() {
+  ['gift', 'bigGift', 'follow', 'join', 'donation'].forEach(t => {
+    document.getElementById(`en-${t}`).checked = true;
+  });
+  update();
+}
+
+update();
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

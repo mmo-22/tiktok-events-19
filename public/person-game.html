@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>خمّن الشخصية - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root { --bg:#0d0d14; --surface:#181824; --surface2:#242436; --border:#2d2d40; --text:#f0f0f5; --muted:#9a9ab0; --accent:#ff0050; --accent2:#25f4ee; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Tajawal',sans-serif; padding:20px; min-height:100vh; }
+  .wrap { max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:14px; }
+  .header { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; background:var(--surface); border-radius:12px; }
+  .header h1 { font-size:22px; }
+  .status-badge { font-size:12px; padding:4px 12px; border-radius:20px; background:var(--surface2); color:var(--muted); }
+  .status-badge.active { background:#1dba72; color:#fff; }
+  .card { background:var(--surface); border-radius:14px; padding:16px; border:1px solid var(--border); }
+  .card-title { font-size:15px; font-weight:700; margin-bottom:12px; color:var(--accent2); }
+  .cats { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .cat { padding:6px 14px; background:var(--surface2); border-radius:16px; font-size:12px; cursor:pointer; border:1px solid var(--border); }
+  .cat.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .current-person { display:flex; gap:14px; align-items:center; padding:16px; background:var(--surface2); border-radius:12px; }
+  .current-person img { width:80px; height:80px; border-radius:12px; object-fit:cover; background:#333; }
+  .cp-info { flex:1; }
+  .cp-name { font-size:18px; font-weight:900; color:var(--accent2); }
+  .cp-cat { font-size:12px; color:var(--muted); margin-top:2px; }
+  .cp-hint { margin-top:8px; padding:8px 12px; background:rgba(37,244,238,.1); border:1px solid rgba(37,244,238,.3); border-radius:8px; font-size:13px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn { padding:10px 16px; border:none; border-radius:10px; font-family:inherit; font-weight:700; cursor:pointer; font-size:14px; transition:all .15s; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .btn-start { background:#1dba72; color:#fff; flex:1; }
+  .btn-stop  { background:var(--accent); color:#fff; flex:1; }
+  .btn-hint  { background:#f59e0b; color:#fff; flex:1; }
+  .btn-next  { background:var(--accent2); color:#000; flex:1; }
+  .btn-reveal { background:#a78bfa; color:#fff; flex:1; }
+  .leaders { display:flex; flex-direction:column; gap:6px; }
+  .leader-item { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--surface2); border-radius:10px; }
+  .leader-rank { width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:900; }
+  .leader-av { width:32px; height:32px; border-radius:50%; overflow:hidden; background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .leader-av img { width:100%; height:100%; object-fit:cover; }
+  .leader-name { flex:1; font-weight:700; font-size:13px; }
+  .leader-word { font-size:12px; color:var(--accent2); font-weight:900; background:rgba(37,244,238,.12); padding:2px 8px; border-radius:12px; }
+  .empty-leaders { padding:20px; text-align:center; color:var(--muted); font-size:13px; }
+  .overlay-link { background:var(--surface2); padding:10px; border-radius:8px; font-family:monospace; font-size:12px; word-break:break-all; cursor:pointer; }
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="header">
+    <h1>🎭 خمّن الشخصية</h1>
+    <span class="status-badge" id="status-badge">متوقف</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">الفئات</div>
+    <div class="cats" id="cats"></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px" id="pool-count"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">الشخصية الحالية</div>
+    <div class="current-person" id="current-person" style="display:none">
+      <img id="cp-img" src="" onerror="this.style.display='none'">
+      <div class="cp-info">
+        <div class="cp-name" id="cp-name">—</div>
+        <div class="cp-cat" id="cp-cat">—</div>
+        <div class="cp-hint" id="cp-hint">—</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px" id="cp-hint-idx">—</div>
+      </div>
+    </div>
+    <div id="no-person" style="text-align:center;padding:16px;color:var(--muted);font-size:13px">اضغط "ابدأ" لاختيار شخصية عشوائية</div>
+
+    <div class="actions" style="margin-top:12px">
+      <button class="btn btn-start" id="start-btn" onclick="startGame()">▶ ابدأ (عشوائي)</button>
+      <button class="btn btn-stop"  id="stop-btn"  onclick="stopGame()" disabled>⏹ إيقاف</button>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn btn-hint"   id="hint-btn"   onclick="nextHint()" disabled>💡 تلميح جديد</button>
+      <button class="btn btn-reveal" id="reveal-btn" onclick="revealAnswer()" disabled>👁 أظهر</button>
+      <button class="btn btn-next"   id="next-btn"   onclick="nextPerson()" disabled>⏭ شخصية تالية</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚙️ إعدادات الـ Overlay</div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">حجم الخط في الـ overlay:</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn" style="flex:0 0 42px;background:var(--surface2);border:1px solid var(--border);color:#fff;padding:8px;font-size:16px" onclick="changeScale(-0.1)">−</button>
+        <span id="scale-val" style="flex:1;text-align:center;font-weight:700;color:var(--accent2)">100%</span>
+        <button class="btn" style="flex:0 0 42px;background:var(--surface2);border:1px solid var(--border);color:#fff;padding:8px;font-size:16px" onclick="changeScale(0.1)">+</button>
+        <button class="btn" style="flex:0 0 42px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:8px;font-size:14px" onclick="changeScale(0)">↺</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🏅 فائزي الجولة</div>
+    <div class="leaders" id="winners-list"><div class="empty-leaders">لا يوجد فائزين بعد</div></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">📊 كل المستخدمين</div>
+      <button class="btn" style="font-size:12px;padding:4px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted)" onclick="clearAllStats()">مسح الكل</button>
+    </div>
+    <div class="leaders" id="all-players-list" style="max-height:400px;overflow-y:auto"><div class="empty-leaders">لا يوجد مستخدمين بعد</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">رابط OBS</div>
+    <div class="overlay-link" id="overlay-link" onclick="copyLink()">...</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">اضغط لنسخ</div>
+  </div>
+</div>
+
+<script>
+// استخدام السيرفر كـ proxy لتجاوز hotlink protection
+function wikiImg(filename) {
+  const url = 'https://en.wikipedia.org/wiki/Special:FilePath/' + encodeURIComponent(filename) + '?width=500';
+  return '/api/img-proxy?url=' + encodeURIComponent(url);
+}
+
+// placeholder لشخصيات بدون صور Wikipedia - SVG data URI
+function placeholder(name, color) {
+  const c = color || '#2d2d5e';
+  const letter = name[0];
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500"><rect width="500" height="500" fill="${c}"/><text x="250" y="280" text-anchor="middle" font-size="200" font-weight="900" fill="rgba(255,255,255,0.3)" font-family="sans-serif">${letter}</text></svg>`)}`;
+}
+
+const PEOPLE = [
+  // ⚽ لاعبون عالميون
+  { name:'ميسي', aliases:['ليونيل ميسي','messi','lionel messi'], image: wikiImg('Lionel-Messi-Argentina-2022-FIFA-World-Cup (cropped).jpg'), category:'لاعبون عالميون',
+    hints:['لاعب كرة قدم من أمريكا الجنوبية','حقق كأس العالم 2022','أرجنتيني فاز بالكرة الذهبية 8 مرات','ليونيل ميسي'] },
+  { name:'رونالدو', aliases:['كريستيانو','كريستيانو رونالدو','ronaldo','cristiano ronaldo','CR7'], image: wikiImg('Cristiano Ronaldo 2018.jpg'), category:'لاعبون عالميون',
+    hints:['لاعب كرة قدم برتغالي','يلعب في دوري روشن السعودي','هدّاف تاريخي برقم CR7','كريستيانو رونالدو'] },
+  { name:'نيمار', aliases:['neymar','نيمار جونيور'], image: wikiImg('Neymar PSG.jpg'), category:'لاعبون عالميون',
+    hints:['لاعب برازيلي','انتقل للهلال السعودي','يلبس الرقم 10','نيمار دا سيلفا'] },
+  { name:'مبابي', aliases:['كيليان مبابي','mbappe','كيليان'], image: wikiImg('Kylian Mbappé 2019.jpg'), category:'لاعبون عالميون',
+    hints:['لاعب فرنسي سريع جداً','انتقل لريال مدريد 2024','نجم منتخب فرنسا الشاب','كيليان مبابي'] },
+  { name:'صلاح', aliases:['محمد صلاح','mo salah','salah'], image: wikiImg('Mohamed Salah 2018.jpg'), category:'لاعبون عالميون',
+    hints:['لاعب مصري شهير','يلعب في ليفربول','الملك المصري في البريميرليغ','محمد صلاح'] },
+  { name:'بنزيما', aliases:['كريم بنزيمة','بن زيمة','benzema'], image: wikiImg('Karim Benzema WC 2022.jpg'), category:'لاعبون عالميون',
+    hints:['مهاجم فرنسي من أصل جزائري','فاز بالكرة الذهبية 2022','انتقل للاتحاد السعودي','كريم بنزيمة'] },
+  { name:'هالاند', aliases:['إرلينغ هالاند','haaland'], image: wikiImg('Erling Haaland 2023 (cropped).jpg'), category:'لاعبون عالميون',
+    hints:['لاعب نرويجي مهاجم','يلعب لمانشستر سيتي','هدّاف سوبر','إرلينغ هالاند'] },
+  { name:'حكيمي', aliases:['أشرف حكيمي','hakimi'], image: wikiImg('Achraf Hakimi 2022.jpg'), category:'لاعبون عالميون',
+    hints:['لاعب مغربي','قاد منتخبه لنصف نهائي كأس العالم 2022','يلعب في باريس سان جيرمان','أشرف حكيمي'] },
+  { name:'رونالدينيو', aliases:['ronaldinho'], image: wikiImg('Ronaldinho 2019.jpg'), category:'لاعبون عالميون',
+    hints:['لاعب برازيلي أسطوري','معروف بالمهارات والابتسامة','فاز بالكرة الذهبية 2005','رونالدينيو'] },
+  { name:'زيدان', aliases:['زين الدين زيدان','zidane'], image: wikiImg('Zinedine Zidane by Tasnim 03.jpg'), category:'لاعبون عالميون',
+    hints:['لاعب فرنسي أسطوري','نطح ماتيراتزي في نهائي 2006','درّب ريال مدريد','زين الدين زيدان'] },
+  { name:'مارادونا', aliases:['دييغو مارادونا','maradona'], image: wikiImg('Maradona-Mundial 86 con la copa.JPG'), category:'لاعبون عالميون',
+    hints:['لاعب أرجنتيني أسطوري','يد الله','فاز بكأس العالم 1986','دييغو مارادونا'] },
+  { name:'بيكهام', aliases:['ديفيد بيكهام','beckham'], image: wikiImg('David Beckham Nov 11 2007.jpg'), category:'لاعبون عالميون',
+    hints:['لاعب إنجليزي','معروف بالركلات الحرة','تزوج فيكتوريا','ديفيد بيكهام'] },
+
+  // ⚽ لاعبون سعوديون
+
+  // 🇸🇦 مشاهير سعوديون
+  { name:'إبراهيم الخيرالله', aliases:['الخيرالله','ابراهيم الخير الله','ابراهيم الخيرالله'], image: '/people/ibrahim-khairallah.png', category:'مشاهير سعوديون',
+    hints:['ممثل وكوميديان سعودي','يجمع الكوميديا بالقضايا الاجتماعية','برز في الدراما السعودية','إبراهيم الخيرالله'] },
+  { name:'عبدالله السبع', aliases:['السبع','عبدالله'], image: '/people/abdullah-sabe.png', category:'مشاهير سعوديون',
+    hints:['مؤثر تقني سعودي','يبسّط مفاهيم التكنولوجيا الحديثة','محتوى تربوي تقني','عبدالله السبع'] },
+  { name:'عبدالله الجمعة', aliases:['الجمعة','رحالة'], image: '/people/abdullah-jumah.png', category:'مشاهير سعوديون',
+    hints:['رحالة سعودي شهير ومؤلف','يوثق مغامراته حول العالم','سافر لأكثر من 100 دولة','عبدالله الجمعة'] },
+  { name:'عبدالرحمن المطيري', aliases:['المطيري','عبدالرحمن'], image: '/people/abdulrahman-mutairi.png', category:'مشاهير سعوديون',
+    hints:['مؤثر سعودي','يشتهر بمبادراته الاجتماعية والخيرية','من أشهر الشخصيات على سناب شات','عبدالرحمن المطيري'] },
+  { name:'ثنيان خالد', aliases:['ثنيان'], image: '/people/thnayan-khalid.png', category:'مشاهير سعوديون',
+    hints:['يوتيوبر سعودي شهير','محتوى فلوقات','من أكبر صناع المحتوى في السعودية','ثنيان خالد'] },
+  { name:'بندريتا', aliases:['بندر','بندر المدخلي','banderita'], image: '/people/banderita.png', category:'مشاهير سعوديون',
+    hints:['من أبرز صناع محتوى الألعاب في السعودية','قيمر سعودي','اسمه الحقيقي بندر المدخلي','بندريتا'] },
+  { name:'سعودي ريبورترز', aliases:['عبدالله وخالد','saudi reporters'], image: '/people/saudi-reporters.png', category:'مشاهير سعوديون',
+    hints:['ثنائي سعودي','محتوى ترفيهي متنوع','من أشهر قنوات يوتيوب السعودية','سعودي ريبورترز'] },
+  { name:'فايز المالكي', aliases:['فايز','المالكي'], image: '/people/fayez-malki.png', category:'مشاهير سعوديون',
+    hints:['ممثل سعودي وناشط اجتماعي','من أشهر الكوميديين في السعودية','بارز في الأعمال الخيرية','فايز المالكي'] },
+  { name:'طارق الحربي', aliases:['طارق','الحربي'], image: '/people/tariq-harbi.png', category:'مشاهير سعوديون',
+    hints:['ممثل وكوميديان سعودي','من أشهر مشاهير إنستغرام','محتوى كوميدي','طارق الحربي'] },
+  { name:'سامي الشيباني', aliases:['الشيباني','السناب الأمني'], image: '/people/sami-shaibani.png', category:'مشاهير سعوديون',
+    hints:['مؤسس حساب السناب الأمني','مهتم بالتوعية الأمنية والميدانية','محتوى أمني سعودي','سامي الشيباني'] },
+  { name:'نايف حمدان', aliases:['نايف','حمدان'], image: '/people/nayef-hamdan.png', category:'مشاهير سعوديون',
+    hints:['من أكثر الشخصيات متابعة حوالي 30 مليون','أسلوبه القصصي التاريخي ممتع','سعودي مشهور على سناب شات','نايف حمدان'] },
+  { name:'يعقوب الفرحان', aliases:['الفرحان','يعقوب'], image: '/people/yaqoub-farhan.png', category:'مشاهير سعوديون',
+    hints:['ممثل سعودي معروف','شارك في مسلسل رشاش','أدوار نوعية في الدراما','يعقوب الفرحان'] },
+  { name:'أبو ريان', aliases:['ابو ريان'], image: '/people/abu-rayan.png', category:'مشاهير سعوديون',
+    hints:['من أكثر الشخصيات متابعة على سناب شات','معروف بعفويته وقربه من الجمهور','سعودي مشهور','أبو ريان'] },
+  { name:'بدر بن عبدالمحسن', aliases:['بدر','مهندس الكلمة'], image: '/people/badr-abdulmohsin.png', category:'مشاهير سعوديون',
+    hints:['شاعر سعودي كبير','مهندس الكلمة','شكّل وجدان الأغنية السعودية والخليجية','بدر بن عبدالمحسن'] },
+  { name:'ياسر الحزيمي', aliases:['الحزيمي'], image: '/people/yasser-hazimi.png', category:'مشاهير سعوديون',
+    hints:['مدرب ومؤلف في التنمية البشرية','حلقاته في بودكاست فنجان حققت أرقاماً قياسية','سعودي مؤثر','ياسر الحزيمي'] },
+  { name:'داوود الشريان', aliases:['الشريان','داوود'], image: '/people/dawood-shirian.png', category:'مشاهير سعوديون',
+    hints:['إعلامي سعودي مخضرم','من أقوى الأصوات في الصحافة','برامج حوارية تناقش قضايا المجتمع','داوود الشريان'] },
+  { name:'إبراهيم الحجاج', aliases:['الحجاج','ابراهيم'], image: '/people/ibrahim-hajjaj.png', category:'مشاهير سعوديون',
+    hints:['نجم كوميديا ودراما سعودي','بطل فيلم سطّار','حقق نجاحاً سينمائياً كبيراً','إبراهيم الحجاج'] },
+  { name:'صهيب وفارس قدس', aliases:['قدس','تلفاز 11','قدس ابراذرز'], image: '/people/qods-brothers.png', category:'مشاهير سعوديون',
+    hints:['ثنائي سعودي من المخرجين والمنتجين','قادا موجة تلفاز 11','أنتجا فيلم شمس المعارف','صهيب وفارس قدس'] },
+  { name:'مساعد الدوسري', aliases:['Msdossary','مساعد'], image: '/people/msdossary.png', category:'مشاهير سعوديون',
+    hints:['بطل العالم في لعبة فيفا','من أهم الأسماء في الرياضات الإلكترونية','قيمر سعودي عالمي','مساعد الدوسري'] },
+  { name:'يزيد الراجحي', aliases:['الراجحي','يزيد'], image: '/people/yazeed-rajhi.png', category:'مشاهير سعوديون',
+    hints:['بطل راليات سعودي ورجل أعمال','يجمع بين النجاح الرياضي والتأثير','مشهور على سناب شات','يزيد الراجحي'] },
+  { name:'علي البليهي', aliases:['البليهي','علي'], image: '/people/ali-boleahi.png', category:'مشاهير سعوديون',
+    hints:['لاعب كرة قدم سعودي ومؤثر','تصريحاته مثيرة على سناب شات','يلعب للهلال','علي البليهي'] },
+  { name:'خالد صقر', aliases:['صقر','خالد'], image: '/people/khalid-saqr.png', category:'مشاهير سعوديون',
+    hints:['ممثل سعودي','تصدر استفتاءات أفضل ممثل لرمضان','دوره في مسلسل شارع الأعشى','خالد صقر'] },
+  { name:'خالد العليان', aliases:['العليان'], image: '/people/khalid-olayan.png', category:'مشاهير سعوديون',
+    hints:['صانع محتوى سعودي','فاز بجائزة أفضل صانع محتوى في الوطن العربي','جوائز تيك توك القاهرة','خالد العليان'] },
+
+  // 🎭 ممثلون
+  { name:'توم كروز', aliases:['كروز','tom cruise'], image: wikiImg('Tom Cruise by Gage Skidmore 2.jpg'), category:'ممثلون',
+    hints:['ممثل أمريكي','بطل سلسلة Mission Impossible','يؤدي المشاهد الخطرة بنفسه','توم كروز'] },
+  { name:'دي كابريو', aliases:['ليوناردو','ليوناردو دي كابريو','dicaprio'], image: wikiImg('Leonardo Dicaprio Cannes 2019.jpg'), category:'ممثلون',
+    hints:['ممثل أمريكي شهير','بطل فيلم تايتانيك','فاز بأوسكار بعد سنوات طويلة','ليوناردو دي كابريو'] },
+  { name:'عادل إمام', aliases:['الزعيم','عادل امام'], image: wikiImg('Adel Emam 2014.png'), category:'ممثلون',
+    hints:['ممثل عربي كوميدي','الزعيم','مصري له أفلام لا تعد','عادل إمام'] },
+  { name:'مستر بن', aliases:['روان أتكنسون','روان','mr bean'], image: wikiImg('Rowan Atkinson.jpg'), category:'ممثلون',
+    hints:['ممثل بريطاني كوميدي','مشهور بشخصية صامتة مضحكة','مستر بن','روان أتكنسون'] },
+  { name:'ذا روك', aliases:['دواين جونسون','the rock','rock'], image: wikiImg('Dwayne Johnson 2014.jpg'), category:'ممثلون',
+    hints:['ممثل ومصارع أمريكي','من أشهر نجوم هوليوود','بدأ في المصارعة WWE','ذا روك'] },
+  { name:'جاكي شان', aliases:['jackie chan'], image: wikiImg('Jackie Chan July 2016.jpg'), category:'ممثلون',
+    hints:['ممثل صيني','معروف بأفلام الأكشن والكوميديا','يؤدي المشاهد الخطرة بنفسه','جاكي شان'] },
+  { name:'ويل سميث', aliases:['will smith'], image: wikiImg('TechCrunch Disrupt 2019 (48834434641) (cropped).jpg'), category:'ممثلون',
+    hints:['ممثل أمريكي','بطل فيلم Men in Black','صفع كريس روك في الأوسكار','ويل سميث'] },
+
+  // 💰 رجال أعمال
+  { name:'إيلون ماسك', aliases:['ماسك','ايلون','elon musk'], image: wikiImg('Elon Musk Royal Society (crop2).jpg'), category:'رجال أعمال',
+    hints:['رجل أعمال أمريكي','مالك تسلا','اشترى تويتر وسماها X','إيلون ماسك'] },
+  { name:'بيل غيتس', aliases:['غيتس','bill gates'], image: wikiImg('Bill Gates 2017 (cropped).jpg'), category:'رجال أعمال',
+    hints:['مؤسس شركة تقنية عملاقة','صاحب مايكروسوفت','من أغنى أغنياء العالم','بيل غيتس'] },
+  { name:'ستيف جوبز', aliases:['جوبز','steve jobs'], image: wikiImg('Steve Jobs Headshot 2010-CROP (cropped 2).jpg'), category:'رجال أعمال',
+    hints:['مؤسس شركة التفاحة','توفي 2011','أطلق الآيفون','ستيف جوبز'] },
+  { name:'بيزوس', aliases:['جيف بيزوس','bezos'], image: wikiImg('Jeff Bezos 2016.jpg'), category:'رجال أعمال',
+    hints:['مؤسس شركة تسوق ضخمة','صاحب أمازون','من أغنى رجال العالم','جيف بيزوس'] },
+  { name:'زوكربيرغ', aliases:['مارك','mark zuckerberg','مارك زوكربيرغ'], image: wikiImg('Mark Zuckerberg F8 2019 Keynote (32830578717) (cropped).jpg'), category:'رجال أعمال',
+    hints:['مؤسس شبكة اجتماعية','صاحب فيسبوك وإنستقرام','أسسها وهو طالب','مارك زوكربيرغ'] },
+
+  // ⚽ مدربون
+  { name:'غوارديولا', aliases:['بيب','pep'], image: wikiImg('Pep Guardiola (2).jpg'), category:'مدربون',
+    hints:['مدرب إسباني شهير','يدرب مانشستر سيتي','درب برشلونة من قبل','بيب غوارديولا'] },
+  { name:'أنشيلوتي', aliases:['كارلو','ancelotti'], image: wikiImg('Carlo Ancelotti 2023.jpg'), category:'مدربون',
+    hints:['مدرب إيطالي','يدرب ريال مدريد','فاز بدوري الأبطال مرات','كارلو أنشيلوتي'] },
+  { name:'كلوب', aliases:['يورغن كلوب','klopp'], image: wikiImg('Jürgen Klopp 2018.jpg'), category:'مدربون',
+    hints:['مدرب ألماني','درب ليفربول','معروف بالاحتفالات المجنونة','يورغن كلوب'] },
+
+  // 🕌 شخصيات دينية
+
+  // 🎮 رياضيون آخرون
+  { name:'تايسون', aliases:['مايك تايسون','mike tyson'], image: wikiImg('Mike Tyson 2019 by Glenn Francis.jpg'), category:'رياضيون',
+    hints:['ملاكم أمريكي','أصغر بطل عالم في الملاكمة','معروف بقوة الضربة','مايك تايسون'] },
+  { name:'محمد علي', aliases:['كاسيوس كلاي','muhammad ali'], image: wikiImg('Muhammad Ali NYWTS.jpg'), category:'رياضيون',
+    hints:['ملاكم أمريكي أسطوري','أطلق على نفسه الأعظم','غيّر اسمه من كاسيوس كلاي','محمد علي كلاي'] },
+  { name:'ليبرون', aliases:['ليبرون جيمز','lebron james','lebron'], image: wikiImg('LeBron James - 51959723161 (cropped).jpg'), category:'رياضيون',
+    hints:['لاعب كرة سلة أمريكي','يلعب في NBA','من أعظم لاعبي كرة السلة','ليبرون جيمز'] },
+  { name:'فيدرر', aliases:['روجر فيدرر','federer'], image: wikiImg('Roger Federer (2024).jpg'), category:'رياضيون',
+    hints:['لاعب تنس سويسري','اعتزل 2022','فاز بـ 20 بطولة جراند سلام','روجر فيدرر'] },
+  { name:'أوسين بولت', aliases:['بولت','bolt','usain bolt'], image: wikiImg('Usain Bolt 2012.jpg'), category:'رياضيون',
+    hints:['عدّاء جمايكي','أسرع إنسان على الأرض','رقم قياسي 100 متر','أوسين بولت'] },
+];
+
+const VALID_PEOPLE = PEOPLE.filter(p => p.image && p.hints.length);
+const CATS = ['الكل', ...new Set(VALID_PEOPLE.map(p => p.category))];
+
+const params   = new URLSearchParams(location.search);
+const username = params.get('username') || '';
+const socket   = io();
+let selectedCat  = 'الكل';
+let filteredPool = [...VALID_PEOPLE];
+let currentPerson = null;
+
+document.getElementById('overlay-link').textContent = `${location.origin}/person-overlay.html?username=${username}`;
+
+const catsEl = document.getElementById('cats');
+CATS.forEach(cat => {
+  const el = document.createElement('div');
+  el.className = 'cat' + (cat === 'الكل' ? ' active' : '');
+  el.textContent = cat;
+  el.onclick = () => {
+    selectedCat = cat;
+    document.querySelectorAll('.cat').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    filteredPool = cat === 'الكل' ? [...VALID_PEOPLE] : VALID_PEOPLE.filter(p => p.category === cat);
+    document.getElementById('pool-count').textContent = `${filteredPool.length} شخصية متاحة`;
+  };
+  catsEl.appendChild(el);
+});
+document.getElementById('pool-count').textContent = `${filteredPool.length} شخصية متاحة`;
+
+if (username) socket.emit('join', { username });
+
+let overlayScale = 1;
+async function changeScale(delta) {
+  if (delta === 0) overlayScale = 1;
+  else overlayScale = Math.max(0.6, Math.min(2, overlayScale + delta));
+  document.getElementById('scale-val').textContent = Math.round(overlayScale * 100) + '%';
+  await fetch('/api/person/scale', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, scale: overlayScale }),
+  });
+}
+
+socket.on('person:won', ({ winner, winners, allPlayers }) => {
+  renderWinners(winners || []);
+  if (allPlayers) renderAllPlayers(allPlayers);
+});
+
+socket.on('person:started', (data) => {
+  setActive(true);
+  // لو الانتقال من زر "التالي" يجي السيرفر يبث started — اجلب الحالة
+  fetch(`/api/person/${username}`).then(r => r.json()).then(d => {
+    if (d.person) {
+      const p = filteredPool.find(pp => pp.image === d.person.image);
+      if (p) { currentPerson = p; showCurrentPerson(p, d.person.hintIndex, d.person.totalHints); }
+    }
+  });
+  renderWinners([]);
+});
+
+socket.on('person:hint', ({ hint, hintIndex }) => {
+  if (currentPerson) {
+    document.getElementById('cp-hint').textContent = `💡 ${hint}`;
+    document.getElementById('cp-hint-idx').textContent = `تلميح ${hintIndex + 1} من ${currentPerson.hints.length}`;
+  }
+});
+
+socket.on('person:stopped', () => setActive(false));
+
+function startGame() {
+  if (!filteredPool.length) return alert('لا توجد شخصيات في هذه الفئة');
+  const person = filteredPool[Math.floor(Math.random() * filteredPool.length)];
+  currentPerson = person;
+  fetch('/api/person/start', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, person, pool: filteredPool }),
+  }).then(r => r.json()).then(data => {
+    if (data.ok) { setActive(true); showCurrentPerson(person, 0, person.hints.length); }
+  });
+}
+
+async function stopGame() {
+  await fetch('/api/person/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) });
+  setActive(false);
+}
+
+async function nextHint() {
+  const res = await fetch('/api/person/next-hint', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) });
+  const data = await res.json();
+  if (data.ok && currentPerson) {
+    document.getElementById('cp-hint').textContent = `💡 ${currentPerson.hints[data.hintIndex]}`;
+    document.getElementById('cp-hint-idx').textContent = `تلميح ${data.hintIndex + 1} من ${currentPerson.hints.length}`;
+  }
+}
+
+async function revealAnswer() {
+  await fetch('/api/person/reveal', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) });
+}
+
+async function nextPerson() {
+  const res = await fetch('/api/person/next', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) });
+  const data = await res.json();
+  if (data.ok) {
+    fetch(`/api/person/${username}`).then(r => r.json()).then(d => {
+      if (d.person) {
+        const p = filteredPool.find(pp => pp.image === d.person.image);
+        if (p) { currentPerson = p; showCurrentPerson(p, 0, p.hints.length); }
+      }
+    });
+  }
+}
+
+async function clearAllStats() {
+  if (!confirm('مسح كل النقاط؟')) return;
+  await fetch('/api/person/clear-stats', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) });
+  renderAllPlayers([]);
+}
+
+function setActive(active) {
+  document.getElementById('status-badge').textContent = active ? '🟢 نشط' : 'متوقف';
+  document.getElementById('status-badge').classList.toggle('active', active);
+  document.getElementById('start-btn').disabled = active;
+  document.getElementById('stop-btn').disabled  = !active;
+  document.getElementById('hint-btn').disabled  = !active;
+  document.getElementById('reveal-btn').disabled = !active;
+  document.getElementById('next-btn').disabled   = !active;
+}
+
+function showCurrentPerson(p, hintIdx, totalHints) {
+  if (!p) return;
+  document.getElementById('current-person').style.display = 'flex';
+  document.getElementById('no-person').style.display = 'none';
+  document.getElementById('cp-img').src = p.image;
+  document.getElementById('cp-img').style.opacity = '1';
+  document.getElementById('cp-name').textContent = p.name;
+  document.getElementById('cp-cat').textContent = p.category;
+  document.getElementById('cp-hint').textContent = `💡 ${p.hints[hintIdx || 0]}`;
+  document.getElementById('cp-hint-idx').textContent = `تلميح ${(hintIdx || 0) + 1} من ${totalHints || p.hints.length}`;
+}
+
+function renderWinners(winners) {
+  const el = document.getElementById('winners-list');
+  if (!winners.length) { el.innerHTML = '<div class="empty-leaders">لا يوجد فائزين بعد</div>'; return; }
+  el.innerHTML = winners.map((w, i) => `
+    <div class="leader-item">
+      <span class="leader-rank">${i+1}</span>
+      <div class="leader-av">${w.avatar ? `<img src="${w.avatar}" onerror="this.parentElement.textContent='${esc(w.name[0])}'">` : esc(w.name[0])}</div>
+      <span class="leader-name">${esc(w.name)}</span>
+      <span class="leader-word">${w.totalPersons} 🎭</span>
+    </div>`).join('');
+}
+
+function renderAllPlayers(players) {
+  const list = document.getElementById('all-players-list');
+  if (!players.length) { list.innerHTML = '<div class="empty-leaders">لا يوجد مستخدمين بعد</div>'; return; }
+  list.innerHTML = players.map((p, i) => `
+    <div class="leader-item">
+      <span class="leader-rank">${i+1}</span>
+      <div class="leader-av">${p.avatar ? `<img src="${p.avatar}" onerror="this.parentElement.textContent='${esc(p.name[0])}'">` : esc(p.name[0])}</div>
+      <span class="leader-name">${esc(p.name)}</span>
+      <span class="leader-word">${p.totalPersons} 🎭</span>
+    </div>`).join('');
+}
+
+function copyLink() {
+  const text = document.getElementById('overlay-link').textContent;
+  navigator.clipboard.writeText(text);
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+if (username) {
+  fetch(`/api/person/${username}`).then(r => r.json()).then(data => {
+    if (data.active && data.person) {
+      const p = VALID_PEOPLE.find(pp => pp.image === data.person.image);
+      if (p) { currentPerson = p; showCurrentPerson(p, data.person.hintIndex, data.person.totalHints); setActive(true); }
+    }
+    if (data.winners && data.winners.length) renderWinners(data.winners);
+    if (data.allPlayers && data.allPlayers.length) renderAllPlayers(data.allPlayers);
+    if (typeof data.scale === 'number') {
+      overlayScale = data.scale;
+      document.getElementById('scale-val').textContent = Math.round(overlayScale * 100) + '%';
+    }
+  });
+}
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>خمن الوقت - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root{--bg:#0d0d14;--surface:#181824;--surface2:#242436;--border:#2d2d40;--text:#f0f0f5;--muted:#9a9ab0;--accent:#0891b2;--accent2:#22d3ee;--amber:#f5c542;--red:#e24b4a;--green:#1dba72;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;padding:20px;min-height:100vh;}
+.wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:14px;}
+.header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--surface);border-radius:12px;}
+.header h1{font-size:22px;}
+.badge{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--muted);}
+.badge.active{background:var(--green);color:#fff;}
+.card{background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--border);}
+.card-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--accent2);}
+.row{display:flex;gap:10px;flex-wrap:wrap;}
+.field{flex:1;min-width:120px;}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;}
+.field input{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px;}
+.field input:focus{outline:none;border-color:var(--accent2);}
+.timer-big{text-align:center;font-size:72px;font-weight:900;color:var(--accent2);font-variant-numeric:tabular-nums;margin:8px 0;line-height:1;}
+.timer-dots{display:flex;justify-content:center;gap:10px;padding:20px 0;}
+.dot{width:14px;height:14px;border-radius:50%;background:var(--accent);animation:pulse .8s ease-in-out infinite;}
+.dot:nth-child(2){animation-delay:.2s;}.dot:nth-child(3){animation-delay:.4s;}
+@keyframes pulse{0%,100%{opacity:.3;transform:scale(.9)}50%{opacity:1;transform:scale(1.1)}}
+.phase-indicator{display:flex;gap:6px;margin-bottom:12px;}
+.phase-dot{flex:1;height:6px;border-radius:3px;background:var(--border);}
+.phase-dot.done{background:var(--accent2);}
+.phase-dot.active{background:var(--amber);animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.actions{display:flex;gap:8px;flex-wrap:wrap;}
+.btn{padding:12px 18px;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px;flex:1;}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-start{background:var(--green);color:#fff;}
+.btn-hide{background:var(--amber);color:#000;}
+.btn-stop{background:var(--red);color:#fff;}
+.btn-end{background:#6d28d9;color:#fff;}
+.btn-reset{background:var(--surface2);color:var(--muted);}
+.guesses-list{display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto;}
+.guess-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:10px;font-size:13px;}
+.guess-item.winner{background:rgba(245,197,66,.12);border:1px solid rgba(245,197,66,.35);}
+.guess-av{width:28px;height:28px;border-radius:50%;overflow:hidden;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}
+.guess-av img{width:100%;height:100%;object-fit:cover;}
+.guess-name{flex:1;font-weight:700;}
+.guess-val{color:var(--accent2);font-weight:700;}
+.guess-diff{color:var(--muted);font-size:12px;}
+.empty{text-align:center;padding:20px;color:var(--muted);font-size:13px;}
+.overlay-link{background:var(--surface2);padding:10px;border-radius:8px;font-family:monospace;font-size:12px;word-break:break-all;cursor:pointer;}
+.stats-row{display:flex;gap:8px;}
+.stat-box{flex:1;background:var(--surface2);border-radius:10px;padding:10px;text-align:center;}
+.stat-val{font-size:24px;font-weight:900;color:var(--accent2);}
+.stat-lbl{font-size:11px;color:var(--muted);margin-top:2px;}
+.real-time-reveal{font-size:48px;font-weight:900;color:var(--amber);text-align:center;padding:12px;}
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>⏱️ خمن الوقت</h1><span class="badge" id="status-badge">متوقف</span></div>
+  <div class="card">
+    <div class="card-title">⚙️ إعدادات الجولة</div>
+    <div class="row">
+      <div class="field"><label>مدة العرض الظاهر (ثواني، 0 = يدوي)</label><input type="number" id="visibleDuration" value="5" min="0" max="30"></div>
+      <div class="field"><label>مدة نافذة التخمين (ثواني)</label><input type="number" id="guessDuration" value="20" min="5" max="120"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🎮 التحكم</div>
+    <div class="phase-indicator"><div class="phase-dot" id="ph1"></div><div class="phase-dot" id="ph2"></div><div class="phase-dot" id="ph3"></div><div class="phase-dot" id="ph4"></div></div>
+    <div id="timer-area" style="margin:8px 0;">
+      <div class="timer-big" id="timer-num" style="display:none">0.0</div>
+      <div class="timer-dots" id="timer-dots" style="display:none"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <div id="real-time-reveal" class="real-time-reveal" style="display:none"></div>
+    </div>
+    <div class="stats-row" style="margin-bottom:12px;">
+      <div class="stat-box"><div class="stat-val" id="eligible-count">0</div><div class="stat-lbl">مؤهل</div></div>
+      <div class="stat-box"><div class="stat-val" id="guess-count">0</div><div class="stat-lbl">تخمين</div></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-start" id="btn-start" onclick="startRound()">▶ ابدأ</button>
+      <button class="btn btn-hide" id="btn-hide" onclick="hideTimer()" disabled>🙈 أخفِ</button>
+      <button class="btn btn-stop" id="btn-stop" onclick="stopTimer()" disabled>⏹ أوقف</button>
+      <button class="btn btn-end" id="btn-end" onclick="endGuessing()" disabled>✅ أنهِ التخمين</button>
+      <button class="btn btn-reset" id="btn-reset" onclick="resetRound()" disabled>↺ جولة جديدة</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📊 التخمينات</div>
+    <div class="guesses-list" id="guesses-list"><div class="empty">لم تبدأ الجولة بعد</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">رابط OBS</div>
+    <div class="overlay-link" id="overlay-link" onclick="copyLink()">...</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">اضغط لنسخ</div>
+  </div>
+</div>
+<script>
+const params=new URLSearchParams(location.search),username=params.get('username')||'';
+const socket=io();
+let elapsed=0,timerInt=null,currentState='idle',stoppedAtVal=0;
+const allGuesses=new Map();
+document.getElementById('overlay-link').textContent=location.origin+'/guess-time-overlay.html?username='+username;
+if(username)socket.emit('join',{username});
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function api(path,body={}){return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,...body})}).then(r=>r.json());}
+
+async function startRound(){
+  const visibleDuration=parseInt(document.getElementById('visibleDuration').value)||5;
+  const guessDuration=parseInt(document.getElementById('guessDuration').value)||20;
+  const res=await api('/api/guess-time/start',{visibleDuration,guessDuration});
+  if(!res.ok)return;
+  allGuesses.clear();elapsed=0;setPhase('visible');startTicking();renderGuesses();
+}
+async function hideTimer(){await api('/api/guess-time/hide');}
+async function stopTimer(){const res=await api('/api/guess-time/stop');if(res.ok)stoppedAtVal=res.stoppedAt;}
+async function endGuessing(){await api('/api/guess-time/end');}
+async function resetRound(){await api('/api/guess-time/reset');setPhase('idle');stopTicking();}
+function startTicking(){if(timerInt)clearInterval(timerInt);const start=Date.now()-elapsed;timerInt=setInterval(()=>{elapsed=Date.now()-start;const el=document.getElementById('timer-num');if(el&&el.style.display!=='none')el.textContent=(elapsed/1000).toFixed(1);},100);}
+function stopTicking(){if(timerInt){clearInterval(timerInt);timerInt=null;}}
+
+function setPhase(state){
+  currentState=state;
+  const phases={idle:[0,0,0,0],visible:[1,0,0,0],hidden:[1,1,0,0],guessing:[1,1,1,0],ended:[1,1,1,1]};
+  const p=phases[state]||[0,0,0,0];
+  ['ph1','ph2','ph3','ph4'].forEach((id,i)=>{const el=document.getElementById(id);el.className='phase-dot'+(p[i]===1?(i===p.lastIndexOf(1)?' active':' done'):'');});
+  const badge=document.getElementById('status-badge');
+  const labels={idle:'متوقف',visible:'⏱️ ظاهر',hidden:'🙈 مخفي',guessing:'💬 تخمين',ended:'✅ انتهى'};
+  badge.textContent=labels[state]||state;
+  badge.className='badge'+(['visible','hidden','guessing'].includes(state)?' active':'');
+  document.getElementById('btn-start').disabled=state!=='idle';
+  document.getElementById('btn-hide').disabled=state!=='visible';
+  document.getElementById('btn-stop').disabled=!['visible','hidden'].includes(state);
+  document.getElementById('btn-end').disabled=state!=='guessing';
+  document.getElementById('btn-reset').disabled=!['guessing','ended'].includes(state);
+  document.getElementById('timer-num').style.display=state==='visible'?'block':'none';
+  document.getElementById('timer-dots').style.display=state==='hidden'?'flex':'none';
+  var reveal=document.getElementById('real-time-reveal');
+  reveal.style.display=['guessing','ended'].includes(state)?'block':'none';
+  if(['guessing','ended'].includes(state))reveal.textContent=(stoppedAtVal/1000).toFixed(2)+'s ⏱️';
+}
+
+function renderGuesses(){
+  const list=document.getElementById('guesses-list');
+  const sorted=Array.from(allGuesses.values()).sort((a,b)=>a.diff-b.diff);
+  if(!sorted.length){list.innerHTML='<div class="empty">لا يوجد تخمينات بعد</div>';document.getElementById('guess-count').textContent=0;return;}
+  document.getElementById('guess-count').textContent=sorted.length;
+  list.innerHTML=sorted.map((g,i)=>{
+    const av=g.avatar?'<img src="'+g.avatar+'" onerror="this.parentElement.textContent=\''+esc(g.name[0])+'\'">':esc(g.name[0]);
+    return '<div class="guess-item '+(i===0?'winner':'')+'">'+
+      (i===0?'🏆 ':'')+
+      '<div class="guess-av">'+av+'</div>'+
+      '<span class="guess-name">'+esc(g.name)+'</span>'+
+      '<span class="guess-val">'+g.guess.toFixed(1)+'s</span>'+
+      (stoppedAtVal?'<span class="guess-diff">فرق '+g.diff.toFixed(2)+'s</span>':'')+
+    '</div>';
+  }).join('');
+}
+
+socket.on('gtime:started',()=>{setPhase('visible');});
+socket.on('gtime:hidden',()=>{setPhase('hidden');stopTicking();});
+socket.on('gtime:stopped',({stoppedAt})=>{stoppedAtVal=stoppedAt;stopTicking();setPhase('guessing');Array.from(allGuesses.values()).forEach(g=>g.diff=Math.abs(g.guess-stoppedAt/1000));renderGuesses();});
+socket.on('gtime:eligible',({eligibleCount})=>{document.getElementById('eligible-count').textContent=eligibleCount;});
+socket.on('gtime:guess',({latest,guessCount})=>{allGuesses.set(latest.userId,latest);document.getElementById('guess-count').textContent=guessCount;renderGuesses();});
+socket.on('gtime:ended',({stoppedAt,winner,allGuesses:ag})=>{stoppedAtVal=stoppedAt;ag.forEach(g=>allGuesses.set(g.userId,g));setPhase('ended');renderGuesses();});
+socket.on('gtime:reset',()=>{setPhase('idle');stopTicking();allGuesses.clear();renderGuesses();});
+function copyLink(){navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);}
+if(username){fetch('/api/guess-time/'+username).then(r=>r.json()).then(d=>{if(d.state!=='idle'){stoppedAtVal=d.stoppedAt;setPhase(d.state);document.getElementById('eligible-count').textContent=d.eligibleCount||0;document.getElementById('guess-count').textContent=d.guessCount||0;if(d.state==='visible')startTicking();}});}
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

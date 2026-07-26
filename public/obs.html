@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TikTok Live OBS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: transparent;
+    font-family: 'Tajawal', sans-serif;
+    overflow: hidden;
+    width: 100vw; height: 100vh;
+  }
+  .stats-bar {
+    display: flex; gap: 18px; align-items: center;
+    padding: 8px 14px;
+    background: rgba(0,0,0,0.72);
+    border-radius: 12px;
+    margin: 10px;
+    width: fit-content;
+    flex-wrap: wrap;
+    position: fixed; top: 0;
+  }
+  .stats-bar.side-right { right: 0; }
+  .stats-bar.side-left  { left: 0; }
+  .stat-item { display: flex; align-items: center; gap: 5px; }
+  .stat-item .label { color: #aaa; font-size: 0.85em; }
+  .stat-item.viewers strong { color: #25f4ee; }
+  .stat-item.likes   strong { color: #ff6b6b; }
+  .stat-item.diamonds strong { color: #ffd700; }
+  .stat-item.shares   strong { color: #a78bfa; }
+  .stat-item.followers strong { color: #1dba72; }
+  .stat-item.bump { animation: bump .6s ease; }
+  @keyframes bump {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.18); }
+  }
+
+  .chat-feed {
+    position: absolute;
+    bottom: 0;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    justify-content: flex-end;
+    padding: 0 10px 10px;
+    gap: 4px;
+    width: 480px;
+    max-width: 50vw;
+  }
+  .chat-feed.side-right { right: 0; left: auto; }
+  .chat-feed.side-left  { left: 0;  right: auto; }
+  .message {
+    display: flex; align-items: flex-start; gap: 7px;
+    animation: fadeUp .22s ease;
+    max-width: 100%;
+  }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    flex-shrink: 0; overflow: hidden;
+    background: rgba(255,255,255,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #fff; font-weight: 700;
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .msg-bubble {
+    padding: 5px 10px; border-radius: 10px;
+    max-width: calc(100% - 36px);
+    background: rgba(0,0,0,0.55);
+    direction: ltr; text-align: left;
+  }
+  .msg-user {
+    font-weight: 700; color: #25f4ee; display: inline;
+    direction: ltr; unicode-bidi: embed;
+  }
+  .msg-user.mod { color: #ff0050; }
+  .msg-sep { color: rgba(255,255,255,0.35); margin: 0 4px; }
+  .msg-text { display: inline; line-height: 1.5; }
+  .event-msg .msg-bubble { background: rgba(37,244,238,0.1); border: 1px solid rgba(37,244,238,0.2); }
+  .event-msg .msg-text   { color: #25f4ee !important; }
+  .follow-msg .msg-bubble { background: rgba(29,186,114,0.1); border: 1px solid rgba(29,186,114,0.2); }
+  .follow-msg .msg-text  { color: var(--follow-color, #1dba72) !important; }
+  .share-msg .msg-bubble { background: rgba(165,122,250,0.1); border: 1px solid rgba(165,122,250,0.2); }
+  .share-msg .msg-text   { color: var(--share-color, #a57afa) !important; }
+  .join-msg .msg-bubble  { background: rgba(37,244,238,0.1); border: 1px solid rgba(37,244,238,0.2); }
+  .join-msg .msg-text    { color: var(--join-color, #25f4ee) !important; }
+  .gift-msg { flex-direction: row-reverse; }
+  .gift-msg  .msg-user   { color: #ffd700 !important; }
+  .gift-msg  .msg-text   { color: #ffd700 !important; }
+
+  #emote-container {
+    position: fixed; bottom: 80px; left: 0; right: 0;
+    pointer-events: none; overflow: hidden; height: 60vh;
+  }
+  .floating-emote {
+    position: absolute; bottom: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    animation: floatUp 3.5s ease-out forwards;
+  }
+  .floating-emote img { width: 52px; height: 52px; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5)); }
+  .floating-emote .emote-user {
+    font-size: 11px; font-weight: 700; color: #fff;
+    background: rgba(0,0,0,0.55); padding: 2px 7px; border-radius: 10px;
+    white-space: nowrap;
+  }
+  @keyframes floatUp {
+    0%   { opacity: 0; transform: translateY(0) scale(0.6); }
+    10%  { opacity: 1; transform: translateY(-20px) scale(1.1); }
+    80%  { opacity: 1; transform: translateY(-280px) scale(1); }
+    100% { opacity: 0; transform: translateY(-340px) scale(0.9); }
+  }
+
+</style>
+</head>
+<body>
+
+
+
+<div class="stats-bar" id="stats-bar">
+  <div class="stat-item viewers" id="s-viewers">
+    <span class="label">Viewers:</span>
+    <strong id="viewers">—</strong>
+  </div>
+  <div class="stat-item followers" id="s-followers">
+    <span class="label">➕ Follows:</span>
+    <strong id="followers">0</strong>
+  </div>
+  <div class="stat-item likes" id="s-likes">
+    <span class="label">Likes:</span>
+    <strong id="likes">—</strong>
+  </div>
+  <div class="stat-item diamonds" id="s-diamonds">
+    <span class="label">Diamonds:</span>
+    <strong id="diamonds">0</strong>
+  </div>
+  <div class="stat-item shares" id="s-shares">
+    <span class="label">Shares:</span>
+    <strong id="shares">0</strong>
+  </div>
+</div>
+
+
+
+<div id="emote-container"></div>
+<div class="chat-feed" id="chat-feed"></div>
+
+<script>
+const p = new URLSearchParams(location.search);
+
+const cfg = {
+  username:      p.get('username') || p.get('user') || '',
+  bgColor:       p.get('bgColor')       || 'rgba(0,0,0,0)',
+  fontColor:     p.get('fontColor')     || '#ffffff',
+  fontSize:      p.get('fontSize')      || '1em',
+  fontFamily:    p.get('fontFamily')    || 'Tajawal',
+  usernameColor: p.get('usernameColor') || '#25f4ee',
+  bubbleBg:      p.get('bubbleBg')      || 'rgba(0,0,0,0.55)',
+  direction:     p.get('dir')           || 'rtl',
+  maxMsgs:       parseInt(p.get('max') || '30'),
+  showChats:     p.get('showChats')    !== '0',
+  showGifts:     p.get('showGifts')    !== '0',
+  showLikes:     p.get('showLikes')    !== '0',
+  showFollows:   p.get('showFollows')  !== '0',
+  showJoins:     p.get('showJoins')    !== '0',
+  showShares:    p.get('showShares')   !== '0',
+  showStats:     p.get('showStats')    !== '0',
+  showViewers:   p.get('showViewers')  !== '0',
+  showDiamonds:  p.get('showDiamonds') !== '0',
+  showShareCount:p.get('showShareCount') !== '0',
+  showFollowers: p.get('showFollowers') !== '0',
+  side:          (p.get('side') || 'right').toLowerCase(),
+  soundGift:     p.get('soundGift'),
+  soundBigGift:  p.get('soundBigGift'),
+  soundFollow:   p.get('soundFollow'),
+  soundJoin:     p.get('soundJoin'),
+  soundDonation: p.get('soundDonation'),
+  volGift:       p.get('volGift'),
+  volBigGift:    p.get('volBigGift'),
+  volFollow:     p.get('volFollow'),
+  volJoin:       p.get('volJoin'),
+  volDonation:   p.get('volDonation'),
+  followColor:   p.get('followColor')   || '#1dba72',
+  shareColor:    p.get('shareColor')    || '#a57afa',
+  joinColor:     p.get('joinColor')     || '#25f4ee',
+};
+
+// Apply global styles
+document.documentElement.setAttribute('dir', cfg.direction);
+document.body.style.background  = cfg.bgColor;
+document.body.style.color       = cfg.fontColor;
+document.body.style.fontSize    = cfg.fontSize;
+document.body.style.fontFamily  = `'${cfg.fontFamily}', Tajawal, sans-serif`;
+
+// Load custom Google Font (skip system fonts)
+const systemFonts = ['Arial', 'Tahoma', 'Verdana', 'Georgia'];
+const googleFontMap = {
+  'Arial Arabic': 'Noto+Naskh+Arabic',
+  'Arial Arabic Bold': 'Noto+Naskh+Arabic:wght@700',
+};
+if (cfg.fontFamily !== 'Tajawal' && !systemFonts.includes(cfg.fontFamily)) {
+  const googleName = googleFontMap[cfg.fontFamily] || cfg.fontFamily.replace(/ /g, '+');
+  const l = document.createElement('link');
+  l.rel = 'stylesheet';
+  l.href = `https://fonts.googleapis.com/css2?family=${googleName}&display=swap`;
+  document.head.appendChild(l);
+}
+const fontFamilyMap = {
+  'Arial Arabic': 'Noto Naskh Arabic',
+  'Arial Arabic Bold': 'Noto Naskh Arabic',
+};
+const resolvedFont = fontFamilyMap[cfg.fontFamily] || cfg.fontFamily;
+document.body.style.fontFamily = `'${resolvedFont}', Tajawal, sans-serif`;
+if (cfg.fontFamily === 'Arial Arabic Bold') document.body.style.fontWeight = '700';
+
+document.body.style.setProperty('--follow-color', cfg.followColor);
+document.body.style.setProperty('--share-color', cfg.shareColor);
+document.body.style.setProperty('--join-color', cfg.joinColor);
+
+// Apply side
+document.getElementById('stats-bar').classList.add('side-' + cfg.side);
+document.getElementById('chat-feed').classList.add('side-' + cfg.side);
+
+// Show/hide stats
+const statsBar = document.getElementById('stats-bar');
+if (!cfg.showStats) { statsBar.style.display = 'none'; }
+if (!cfg.showViewers)   document.getElementById('s-viewers').style.display   = 'none';
+if (!cfg.showFollowers) document.getElementById('s-followers').style.display = 'none';
+if (!cfg.showLikes)     document.getElementById('s-likes').style.display     = 'none';
+if (!cfg.showDiamonds)  document.getElementById('s-diamonds').style.display  = 'none';
+if (!cfg.showShareCount) document.getElementById('s-shares').style.display   = 'none';
+
+// ── Sound System ──────────────────────────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+let followOnlyMode = false;
+
+function toggleSoundMode() {
+  followOnlyMode = !followOnlyMode;
+  const btn = document.getElementById('sound-mode-btn');
+  if (followOnlyMode) {
+    btn.textContent = '➕ متابعة فقط — اضغط للكل';
+    btn.classList.add('follow-only');
+    // أوقف كل الأصوات إلا المتابعة
+    soundCfg.gift.enabled    = false;
+    soundCfg.bigGift.enabled = false;
+    soundCfg.join.enabled    = false;
+    soundCfg.donation.enabled= false;
+    soundCfg.follow.enabled  = true;
+  } else {
+    btn.textContent = '🔕 متابعة فقط';
+    btn.classList.remove('follow-only');
+    // أرجع كل الأصوات حسب الإعدادات الأصلية
+    soundCfg.gift.enabled    = cfg.soundGift     !== '0';
+    soundCfg.bigGift.enabled = cfg.soundBigGift  !== '0';
+    soundCfg.join.enabled    = cfg.soundJoin     !== '0';
+    soundCfg.donation.enabled= cfg.soundDonation !== '0';
+    soundCfg.follow.enabled  = cfg.soundFollow   !== '0';
+  }
+}
+
+function unlockSound() {
+  try {
+    const c = getAudioCtx();
+    // نشغّل صوت صامت عشان نفتح الـ audio context
+    const o = c.createOscillator();
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, c.currentTime);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.01);
+    document.getElementById('sound-unlock').classList.add('hidden');
+  } catch(_) {}
+}
+
+// Sound settings — قابلة للتحكم
+const soundCfg = {
+  gift:     { enabled: cfg.soundGift     !== '0', vol: parseFloat(cfg.volGift     || '0.5') },
+  bigGift:  { enabled: cfg.soundBigGift  !== '0', vol: parseFloat(cfg.volBigGift  || '0.8') },
+  follow:   { enabled: cfg.soundFollow   !== '0', vol: parseFloat(cfg.volFollow   || '0.3') },
+  join:     { enabled: cfg.soundJoin     !== '0', vol: parseFloat(cfg.volJoin     || '0.2') },
+  donation: { enabled: cfg.soundDonation !== '0', vol: parseFloat(cfg.volDonation || '0.7') },
+};
+
+// Sound queue — يمنع التداخل
+const soundQueue = [];
+let soundPlaying = false;
+
+function queueSound(fn, priority = 0) {
+  soundQueue.push({ fn, priority });
+  soundQueue.sort((a, b) => b.priority - a.priority);
+  processQueue();
+}
+
+function processQueue() {
+  if (soundPlaying || soundQueue.length === 0) return;
+  soundPlaying = true;
+  const { fn } = soundQueue.shift();
+  const duration = fn();
+  setTimeout(() => { soundPlaying = false; processQueue(); }, (duration || 0.8) * 1000 + 200);
+}
+
+function playTone(freq, duration, type = 'sine', vol = 0.3) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.start(); osc.stop(ctx.currentTime + duration);
+  } catch (_) {}
+}
+
+function soundGift(diamonds) {
+  const isBig = diamonds >= 100;
+  const s = isBig ? soundCfg.bigGift : soundCfg.gift;
+  if (!s.enabled) return;
+  queueSound(() => {
+    if (isBig) {
+      playTone(523, 0.15, 'sine', s.vol * 0.8);
+      setTimeout(() => playTone(659, 0.15, 'sine', s.vol * 0.8), 150);
+      setTimeout(() => playTone(784, 0.15, 'sine', s.vol * 0.9), 300);
+      setTimeout(() => playTone(1047, 0.3, 'sine', s.vol), 450);
+      return 0.9;
+    } else {
+      playTone(600, 0.1, 'sine', s.vol * 0.6);
+      setTimeout(() => playTone(800, 0.15, 'sine', s.vol * 0.6), 120);
+      return 0.35;
+    }
+  }, isBig ? 3 : 2);
+}
+
+function soundFollow() {
+  if (!soundCfg.follow.enabled) return;
+  queueSound(() => {
+    const v = soundCfg.follow.vol;
+    playTone(440, 0.08, 'sine', v * 0.7);
+    setTimeout(() => playTone(550, 0.12, 'sine', v * 0.7), 90);
+    return 0.25;
+  }, 1);
+}
+
+function soundJoin() {
+  if (!soundCfg.join.enabled) return;
+  queueSound(() => {
+    const v = soundCfg.join.vol;
+    playTone(350, 0.07, 'sine', v * 0.5);
+    setTimeout(() => playTone(450, 0.1, 'sine', v * 0.5), 80);
+    return 0.2;
+  }, 0);
+}
+
+function soundDonation() {
+  if (!soundCfg.donation.enabled) return;
+  queueSound(() => {
+    const v = soundCfg.donation.vol;
+    playTone(400, 0.1, 'sine', v * 0.6);
+    setTimeout(() => playTone(500, 0.1, 'sine', v * 0.8), 120);
+    setTimeout(() => playTone(650, 0.1, 'sine', v * 0.9), 240);
+    setTimeout(() => playTone(800, 0.2, 'sine', v), 360);
+    setTimeout(() => playTone(1000, 0.3, 'sine', v), 500);
+    return 1.0;
+  }, 4); // أعلى أولوية
+}
+
+// ── Gift in Chat ──────────────────────────────────────────
+const GIFT_EMOJI = {
+  rose: '🌹', 'finger heart': '🤙', sunglasses: '😎',
+  universe: '🌌', lion: '🦁', rocket: '🚀',
+  crown: '👑', diamond: '💎', star: '⭐', fire: '🔥',
+  heart: '❤️', kiss: '💋', ring: '💍', cake: '🎂',
+  perfume: '🧴', yacht: '🛥️', castle: '🏰', jet: '✈️',
+};
+
+function getGiftEmoji(name) {
+  const lower = name.toLowerCase();
+  for (const [k, v] of Object.entries(GIFT_EMOJI)) {
+    if (lower.includes(k)) return v;
+  }
+  return '🎁';
+}
+
+function showGiftAlert({ user, giftName, giftImageUrl, repeatCount, diamondCount }) {
+  if (!cfg.showGifts) return;
+  const emoji = getGiftEmoji(giftName);
+  const img = giftImageUrl
+    ? `<img src="${giftImageUrl}" style="width:22px;height:22px;vertical-align:middle;border-radius:4px;margin:0 2px" onerror="this.replaceWith(document.createTextNode('${emoji}'))">`
+    : emoji;
+  const count = repeatCount > 1 ? ` <span style="color:#fff">× ${repeatCount}</span>` : '';
+  const diamonds = diamondCount ? ` <span style="color:#a78bfa;font-size:11px">💎${(diamondCount*(repeatCount||1)).toLocaleString()}</span>` : '';
+  const html = `
+    <div class="avatar">${avatarHtml(null, user)}</div>
+    <div class="msg-bubble" style="border:1px solid rgba(255,215,0,0.35);background:rgba(255,215,0,0.08)">
+      <span class="uname" style="color:#ffd700">${escHtml(user)}</span>
+      <span class="sep">:</span>
+      <span>${img} <span style="color:#ffd700;font-weight:700">${escHtml(giftName)}</span>${count}${diamonds}</span>
+    </div>`;
+  addRow(html, 'gift');
+  soundGift((diamondCount || 0) * (repeatCount || 1));
+}
+
+// feed height
+const feed = document.getElementById('chat-feed');
+feed.style.height = cfg.showStats ? 'calc(100vh - 64px)' : '100vh';
+
+// Socket
+const socket = io({
+  transports: ['websocket', 'polling'],
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 2000,
+});
+socket.on('connect', () => {
+  if (cfg.username) socket.emit('join', { username: cfg.username });
+});
+
+// History — رسائل مخزنة على السيرفر
+socket.on('history', (messages) => {
+  messages.forEach(msg => {
+    if (msg.type === 'chat' && cfg.showChats) addRow(`
+      <div class="avatar">${avatarHtml(msg.avatar, msg.user)}</div>
+      <div class="msg-bubble">
+        <span class="msg-user${msg.isModerator?' mod':''}">${escHtml(msg.user)}</span>
+        <span class="msg-sep">:</span>
+        <span class="msg-text">${escHtml(msg.comment)}</span>
+      </div>`);
+    else if (msg.type === 'gift' && cfg.showGifts) addRow(`
+      <div class="avatar">${avatarHtml(msg.avatar, msg.user)}</div>
+      <div class="msg-bubble">
+        <span class="msg-user">${escHtml(msg.user)}</span>
+        <span class="msg-sep">🎁</span>
+        <span class="msg-text">${escHtml(msg.giftName)} × ${msg.repeatCount}</span>
+      </div>`, 'gift-msg');
+  });
+});
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function avatarHtml(url, name) {
+  if (url) return `<img src="${url}" onerror="this.parentElement.textContent='${(name||'?')[0].toUpperCase()}'">`;
+  return (name||'?')[0].toUpperCase();
+}
+function addRow(html, cls = '') {
+  const div = document.createElement('div');
+  div.className = 'message ' + cls;
+  div.innerHTML = html;
+  const bubble = div.querySelector('.msg-bubble');
+  if (bubble && !cls) bubble.style.background = cfg.bubbleBg;
+  const txt = div.querySelector('.msg-text');
+  if (txt && !cls) txt.style.color = cfg.fontColor;
+  const usr = div.querySelector('.msg-user:not(.mod)');
+  if (usr && !cls) usr.style.color = cfg.usernameColor;
+  feed.appendChild(div);
+  while (feed.children.length > cfg.maxMsgs) feed.removeChild(feed.firstChild);
+}
+
+socket.on('chat', ({ user, avatar, comment, isModerator }) => {
+  if (!cfg.showChats) return;
+  addRow(`
+    <div class="avatar">${avatarHtml(avatar, user)}</div>
+    <div class="msg-bubble">
+      <span class="msg-user${isModerator?' mod':''}">${escHtml(user)}</span>
+      <span class="msg-sep">:</span>
+      <span class="msg-text">${escHtml(comment)}</span>
+    </div>`);
+});
+
+socket.on('stats', ({ viewers, likes, diamonds, shares, followers }) => {
+  const setStat = (elId, wrapId, newVal) => {
+    const el = document.getElementById(elId);
+    const prev = parseInt(el.textContent.replace(/,/g, '')) || 0;
+    el.textContent = (newVal || 0).toLocaleString();
+    if (newVal > prev) {
+      const w = document.getElementById(wrapId);
+      w.classList.add('bump');
+      setTimeout(() => w.classList.remove('bump'), 650);
+    }
+  };
+  if (viewers !== undefined)   setStat('viewers',   's-viewers',   viewers);
+  if (likes !== undefined)     setStat('likes',     's-likes',     likes);
+  if (diamonds !== undefined)  setStat('diamonds',  's-diamonds',  diamonds);
+  if (shares !== undefined)    setStat('shares',    's-shares',    shares);
+  if (followers !== undefined) setStat('followers', 's-followers', followers);
+});
+socket.on('viewers', ({ count }) => {
+  document.getElementById('viewers').textContent = count.toLocaleString();
+});
+socket.on('status', ({ viewerCount }) => {
+  if (viewerCount) document.getElementById('viewers').textContent = viewerCount.toLocaleString();
+});
+
+socket.on('gift', (data) => {
+  // نعرض الهدية كـ alert فقط (البطاقة الملوّنة) ولا نضيفها لصف الدردشة
+  showGiftAlert(data);
+});
+
+socket.on('member', ({ user, actionId }) => {
+  if (!cfg.showJoins || actionId !== 1) return;
+  soundJoin();
+  addRow(`<div class="msg-bubble"><span class="msg-text">👋 ${escHtml(user)} انضم</span></div>`, 'join-msg');
+});
+// Emotes (Stickers)
+const emoteContainer = document.getElementById('emote-container');
+socket.on('emote', ({ user, emoteImageUrl }) => {
+  if (!emoteImageUrl) return;
+  const el = document.createElement('div');
+  el.className = 'floating-emote';
+  // Random horizontal position
+  const left = 10 + Math.random() * 70;
+  el.style.left = left + '%';
+  el.innerHTML = `
+    <img src="${emoteImageUrl}" onerror="this.parentElement.remove()">
+    <span class="emote-user">${escHtml(user)}</span>`;
+  emoteContainer.appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+});
+
+socket.on('follow', ({ user }) => {
+  if (!cfg.showFollows) return;
+  soundFollow();
+  addRow(`<div class="msg-bubble"><span class="msg-text">➕ ${escHtml(user)} تابع</span></div>`, 'follow-msg');
+});
+socket.on('share', ({ user }) => {
+  if (!cfg.showShares) return;
+  addRow(`<div class="msg-bubble"><span class="msg-text">🔗 ${escHtml(user)} شارك</span></div>`, 'share-msg');
+});
+socket.on('member', ({ user, actionId }) => {
+  if (!cfg.showJoins || actionId !== 1) return;
+  soundJoin();
+});
+</script>
+</body>
+</html>

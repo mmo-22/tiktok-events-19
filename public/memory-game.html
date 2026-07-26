@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تحدي الذاكرة - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root{--bg:#0d0d14;--surface:#181824;--surface2:#242436;--border:#2d2d40;--text:#f0f0f5;--muted:#9a9ab0;--accent:#ff0050;--accent2:#25f4ee;--purple:#a855f7;--green:#1dba72;--red:#ef4444;--orange:#fb923c}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;padding:20px;min-height:100vh}
+  .wrap{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--surface);border-radius:12px}
+  .header h1{font-size:22px}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--muted)}
+  .badge.active{background:var(--green);color:#fff}
+  .card{background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--border)}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--purple)}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input,.field select{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{padding:11px 16px;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px}
+  .btn-reg{background:var(--green);color:#fff;flex:1}
+  .btn-next{background:var(--purple);color:#fff;flex:1}
+  .btn-stop{background:var(--accent);color:#fff;flex:1}
+
+  .preview{background:#111;border-radius:14px;padding:20px;text-align:center;min-height:100px}
+  .preview-seq{font-size:42px;font-weight:900;color:#fff;letter-spacing:10px;font-family:monospace;direction:ltr;margin:10px 0}
+  .preview-round{font-size:14px;color:var(--purple)}
+
+  .player-list{max-height:250px;overflow-y:auto}
+  .player-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:4px;font-size:13px}
+  .player-item.alive{background:rgba(29,186,114,.06);border:1px solid rgba(29,186,114,.15)}
+  .player-item.dead{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.15);opacity:.5;text-decoration:line-through}
+  .player-name{flex:1;font-weight:700}
+  .player-score{color:var(--purple);font-weight:700}
+  .player-status{font-size:16px}
+
+  .timer-display{text-align:center;font-size:36px;font-weight:900;color:var(--purple);margin:8px 0}
+  .empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
+  .overlay-link{background:var(--surface2);padding:10px;border-radius:8px;font-family:monospace;font-size:12px;word-break:break-all;cursor:pointer}
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>🧠 تحدي الذاكرة</h1>
+    <span class="badge" id="status-badge">متوقف</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚙️ الإعدادات</div>
+    <div class="row3">
+      <div class="field"><label>كلمة التسجيل</label><input type="text" id="keyword" value="ذاكرة"></div>
+      <div class="field"><label>نوع التسلسل</label>
+        <select id="seq-type">
+          <option value="numbers">أرقام</option>
+          <option value="letters">حروف عربية</option>
+          <option value="mixed">مختلط</option>
+        </select>
+      </div>
+      <div class="field"><label>وقت الإجابة (ثواني)</label><input type="number" id="answer-time" value="10" min="3" max="30"></div>
+    </div>
+    <div class="row3">
+      <div class="field"><label>عدد الحروف (يبدأ بـ)</label><input type="number" id="start-diff" value="4" min="2" max="15"></div>
+      <div class="field"><label>وقت العرض (ثواني)</label><input type="number" id="show-time" value="3" min="1" max="10" step="0.5"></div>
+      <div class="field"><label>زيادة كل جولة</label><input type="number" id="diff-inc" value="1" min="0" max="3"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎮 التحكم</div>
+    <div class="actions" style="margin-bottom:10px">
+      <button class="btn btn-reg" id="reg-btn" onclick="startRegistration()">📝 فتح التسجيل</button>
+    </div>
+    <div class="actions">
+      <button class="btn btn-next" onclick="nextRound()">⏭ الجولة التالية</button>
+      <button class="btn btn-stop" onclick="stopGame()">⏹ إيقاف</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👁️ المعاينة</div>
+    <div class="preview" id="preview">
+      <div class="preview-round" id="p-round"></div>
+      <div class="preview-seq" id="p-seq">—</div>
+      <div class="timer-display" id="timer-display" style="display:none">0</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">👥 اللاعبين (<span id="alive-count">0</span> باقي / <span id="total-count">0</span>)</div>
+    </div>
+    <div class="player-list" id="player-list"><div class="empty">لا يوجد لاعبين</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 رابط الـ Overlay</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="overlay-link" id="overlay-link" style="flex:1">—</div>
+      <button class="btn" onclick="copyLink()" style="background:var(--accent2);color:#000;padding:10px 16px;font-size:13px">📋 نسخ</button>
+    </div>
+  </div>
+</div>
+<script>
+var params = new URLSearchParams(location.search);
+var username = params.get('username') || '';
+var socket = io();
+if (username) socket.emit('join', { username });
+
+document.getElementById('overlay-link').textContent = location.origin + '/memory-overlay.html?username=' + username;
+function copyLink() {
+  navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);
+  document.getElementById('overlay-link').style.borderColor = '#1dba72';
+  setTimeout(function(){ document.getElementById('overlay-link').style.borderColor = ''; }, 1000);
+}
+
+var currentRound = 0;
+var timerInt = null;
+
+async function startRegistration() {
+  var keyword = document.getElementById('keyword').value.trim() || 'ذاكرة';
+  currentRound = 0;
+  await fetch('/api/memory/start-register', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, keyword }),
+  });
+  document.getElementById('status-badge').textContent = '📝 تسجيل';
+  document.getElementById('status-badge').classList.add('active');
+  document.getElementById('p-seq').textContent = '📝 انتظار اللاعبين...';
+  document.getElementById('p-round').textContent = '';
+  loadPlayers();
+}
+
+async function nextRound() {
+  currentRound++;
+  var startDiff = parseInt(document.getElementById('start-diff').value) || 4;
+  var diffInc = parseInt(document.getElementById('diff-inc').value) || 1;
+  var difficulty = startDiff + (currentRound - 1) * diffInc;
+  var showTime = parseFloat(document.getElementById('show-time').value) || 3;
+  var answerTime = parseInt(document.getElementById('answer-time').value) || 10;
+  var seqType = document.getElementById('seq-type').value;
+
+  var res = await fetch('/api/memory/start-round', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, difficulty, showTime, answerTime, seqType }),
+  });
+  var data = await res.json();
+  if (data.ok) {
+    document.getElementById('status-badge').textContent = '🟢 جولة ' + data.round;
+    document.getElementById('status-badge').classList.add('active');
+    document.getElementById('p-seq').textContent = data.sequence;
+    document.getElementById('p-round').textContent = 'الجولة ' + data.round + ' — ' + difficulty + ' حروف';
+    // Timer countdown
+    startTimer(showTime + answerTime);
+  }
+}
+
+async function stopGame() {
+  await fetch('/api/memory/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+  document.getElementById('status-badge').textContent = 'متوقف';
+  document.getElementById('status-badge').classList.remove('active');
+  document.getElementById('p-seq').textContent = '—';
+  document.getElementById('p-round').textContent = '';
+  if (timerInt) { clearInterval(timerInt); timerInt = null; }
+  document.getElementById('timer-display').style.display = 'none';
+}
+
+function startTimer(sec) {
+  var endTime = Date.now() + sec * 1000;
+  document.getElementById('timer-display').style.display = 'block';
+  if (timerInt) clearInterval(timerInt);
+  timerInt = setInterval(function() {
+    var rem = Math.max(0, (endTime - Date.now()) / 1000);
+    document.getElementById('timer-display').textContent = rem.toFixed(1);
+    if (rem <= 0) { clearInterval(timerInt); timerInt = null; loadPlayers(); }
+  }, 100);
+}
+
+async function loadPlayers() {
+  var res = await fetch('/api/memory/' + username);
+  var data = await res.json();
+  renderPlayers(data.players || []);
+  document.getElementById('alive-count').textContent = data.alivePlayers || 0;
+  document.getElementById('total-count').textContent = data.totalPlayers || 0;
+}
+
+function renderPlayers(list) {
+  var el = document.getElementById('player-list');
+  if (!list.length) { el.innerHTML = '<div class="empty">لا يوجد لاعبين</div>'; return; }
+  el.innerHTML = list.map(function(p) {
+    var cls = p.alive ? 'alive' : 'dead';
+    var icon = p.alive ? '✅' : '❌';
+    return '<div class="player-item ' + cls + '"><span class="player-status">' + icon + '</span><span class="player-name">' + esc(p.name) + '</span><span class="player-score">' + p.score + ' ✓</span></div>';
+  }).join('');
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// Live updates
+socket.on('memory:player-joined', function(d) { loadPlayers(); });
+socket.on('memory:correct', function(d) { loadPlayers(); });
+socket.on('memory:wrong', function(d) { loadPlayers(); });
+socket.on('memory:results', function(d) {
+  loadPlayers();
+  if (d.winner) {
+    document.getElementById('status-badge').textContent = '🏆 فائز!';
+    document.getElementById('p-seq').textContent = '🏆 ' + d.winner.name;
+  }
+});
+
+if (username) loadPlayers();
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Draw Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.main{position:relative;width:640px;opacity:0;transition:opacity .15s}
+.main.show{opacity:1}
+
+.top-bar{display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.85);border-radius:14px 14px 0 0;padding:10px 16px;backdrop-filter:blur(8px)}
+.title{font-size:14px;color:rgba(255,255,255,.5)}.title span{color:#a855f7;font-weight:900}
+.hint-text{font-size:13px;color:#fbbf24;font-weight:700}
+.timer-badge{padding:4px 12px;border-radius:20px;background:rgba(255,255,255,.1);font-size:14px;font-weight:900;color:#fff}
+.timer-badge.warn{color:#f59e0b}
+.timer-badge.danger{color:#ef4444}
+
+.canvas-wrap{background:#fff;position:relative;aspect-ratio:16/10}
+canvas{width:100%;height:100%;display:block}
+
+.bottom-bar{background:rgba(0,0,0,.85);border-radius:0 0 14px 14px;padding:8px 16px;display:flex;align-items:center;gap:8px;backdrop-filter:blur(8px)}
+.winners-row{display:flex;gap:4px;flex:1;overflow:hidden}
+.w-chip{display:flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(29,186,114,.12);border-radius:6px;font-size:11px;font-weight:700;color:#1dba72;animation:chipIn .3s ease;white-space:nowrap}
+.w-rank{font-size:12px}
+@keyframes chipIn{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.answer-count{font-size:11px;color:rgba(255,255,255,.3)}
+
+.result-overlay{position:absolute;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;border-radius:14px;z-index:10}
+.result-overlay.show{display:flex;animation:fadeIn .4s ease}
+.result-word{font-size:32px;font-weight:900;color:#a855f7;margin-bottom:8px}
+.result-label{font-size:14px;color:rgba(255,255,255,.4);margin-bottom:16px}
+.result-winners{display:flex;flex-direction:column;gap:4px;align-items:center}
+.rw-item{display:flex;align-items:center;gap:8px;padding:6px 16px;background:rgba(255,255,255,.06);border-radius:10px;font-size:14px;font-weight:700;color:#fff}
+.rw-rank{font-size:18px}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+.join-popup{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(29,186,114,.9);color:#fff;padding:8px 20px;border-radius:10px;font-size:13px;font-weight:700;z-index:20;animation:popIn .3s ease;display:none}
+.join-popup.show{display:block}
+@keyframes popIn{from{transform:translate(-50%,-50%) scale(.8);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+</style>
+</head>
+<body>
+<div class="main" id="box">
+  <div class="top-bar">
+    <div class="title">🖼️ <span>ما هذا الرسم؟</span></div>
+    <div class="hint-text" id="hint-text"></div>
+    <div class="timer-badge" id="timer-badge">--</div>
+  </div>
+  <div class="canvas-wrap">
+    <canvas id="canvas" width="800" height="500"></canvas>
+  </div>
+  <div class="bottom-bar">
+    <div class="winners-row" id="winners-row"></div>
+    <div class="answer-count" id="answer-count"></div>
+  </div>
+  <div class="result-overlay" id="result-overlay">
+    <div class="result-label">الكلمة كانت</div>
+    <div class="result-word" id="result-word"></div>
+    <div class="result-winners" id="result-winners"></div>
+  </div>
+  <div class="join-popup" id="join-popup"></div>
+</div>
+<script>
+var params = new URLSearchParams(location.search);
+var username = params.get('username') || '';
+var socket = io();
+if (username) socket.emit('join', { username });
+
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
+ctx.fillStyle = '#fff';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+var timerInt = null;
+var RANKS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣'];
+
+// Receive drawing strokes
+socket.on('draw:stroke', function(d) {
+  ctx.strokeStyle = d.color || '#000';
+  ctx.lineWidth = d.size || 4;
+  if (d.new) {
+    ctx.beginPath();
+    ctx.moveTo(d.x, d.y);
+  } else {
+    ctx.lineTo(d.x, d.y);
+    ctx.stroke();
+  }
+});
+
+socket.on('draw:clear-canvas', function() {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.beginPath();
+});
+
+socket.on('draw:start', function(d) {
+  document.getElementById('box').classList.add('show');
+  document.getElementById('result-overlay').classList.remove('show');
+  document.getElementById('winners-row').innerHTML = '';
+  document.getElementById('answer-count').textContent = '';
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.beginPath();
+  // Hint
+  document.getElementById('hint-text').textContent = d.hint ? '💡 ' + d.hint : '';
+  // Timer
+  startTimer(d.answerTime);
+});
+
+socket.on('draw:hint', function(d) {
+  document.getElementById('hint-text').textContent = d.hint ? '💡 ' + d.hint : '';
+});
+
+socket.on('draw:correct', function(d) {
+  var el = document.getElementById('winners-row');
+  var chip = document.createElement('span');
+  chip.className = 'w-chip';
+  chip.innerHTML = '<span class="w-rank">'+(RANKS[d.rank-1]||d.rank)+'</span> '+esc(d.player);
+  el.appendChild(chip);
+  document.getElementById('answer-count').textContent = d.total + ' ✅';
+  // Show popup
+  showPopup('✅ ' + d.player + ' عرف!');
+});
+
+socket.on('draw:end', function(d) {
+  if (timerInt) { clearInterval(timerInt); timerInt = null; }
+  document.getElementById('timer-badge').textContent = '⏹';
+  // Show result
+  document.getElementById('result-word').textContent = d.word || '?';
+  var rw = document.getElementById('result-winners');
+  rw.innerHTML = (d.winners||[]).slice(0,5).map(function(w,i){
+    return '<div class="rw-item"><span class="rw-rank">'+(RANKS[i]||i+1)+'</span>'+esc(w.name)+'</div>';
+  }).join('') || '<div style="color:rgba(255,255,255,.3);font-size:13px">ما أحد عرف 😅</div>';
+  document.getElementById('result-overlay').classList.add('show');
+});
+
+socket.on('draw:clear', function() {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.beginPath();
+});
+
+function startTimer(sec) {
+  if (timerInt) clearInterval(timerInt);
+  var end = Date.now() + sec * 1000;
+  var badge = document.getElementById('timer-badge');
+  timerInt = setInterval(function() {
+    var rem = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+    badge.textContent = rem + 's';
+    badge.className = 'timer-badge' + (rem <= 5 ? ' danger' : rem <= 15 ? ' warn' : '');
+    if (rem <= 0) { clearInterval(timerInt); timerInt = null; }
+  }, 200);
+}
+
+function showPopup(text) {
+  var el = document.getElementById('join-popup');
+  el.textContent = text;
+  el.classList.add('show');
+  setTimeout(function(){ el.classList.remove('show'); }, 2000);
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

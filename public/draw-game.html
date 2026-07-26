@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ما هذا الرسم؟ - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root{--bg:#0d0d14;--surface:#181824;--surface2:#242436;--border:#2d2d40;--text:#f0f0f5;--muted:#9a9ab0;--accent:#ff0050;--accent2:#25f4ee;--green:#1dba72;--red:#ef4444;--purple:#a855f7}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;padding:20px;min-height:100vh}
+  .wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--surface);border-radius:12px}
+  .header h1{font-size:22px}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--muted)}
+  .badge.active{background:var(--green);color:#fff}
+  .card{background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--border)}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--purple)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input,.field select{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px}
+  .btn{padding:11px 16px;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px;transition:opacity .15s}
+  .btn:hover{opacity:.85}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+
+  /* Canvas */
+  .canvas-wrap{position:relative;background:#fff;border-radius:14px;overflow:hidden;aspect-ratio:16/10}
+  canvas{width:100%;height:100%;cursor:crosshair;display:block}
+  .tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+  .color-btn{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:all .15s}
+  .color-btn.active{border-color:#fff;transform:scale(1.15)}
+  .size-btn{padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px;color:var(--muted);font-family:inherit}
+  .size-btn.active{border-color:var(--accent2);color:var(--accent2)}
+  .tool-btn{padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;color:var(--muted);font-family:inherit;font-weight:600}
+  .tool-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+  .tool-btn.eraser{color:var(--red)}
+  .tool-btn.eraser.active{border-color:var(--red);background:rgba(239,68,68,.1)}
+
+  .winners-list{display:flex;flex-direction:column;gap:4px;max-height:150px;overflow-y:auto}
+  .winner-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface2);border-radius:8px;font-size:13px}
+  .winner-rank{font-size:16px;width:24px;text-align:center}
+  .winner-name{flex:1;font-weight:700}
+  .empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
+  .overlay-link{background:var(--surface2);padding:10px;border-radius:8px;font-family:monospace;font-size:12px;word-break:break-all;cursor:pointer}
+
+  .word-bank{display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto}
+  .word-chip{padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;color:var(--muted);font-family:inherit;transition:all .15s}
+  .word-chip:hover{border-color:var(--purple);color:var(--purple)}
+  .word-chip.used{opacity:.2}
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>🖼️ ما هذا الرسم؟</h1><span class="badge" id="status-badge">متوقف</span></div>
+
+  <div class="card">
+    <div class="card-title">⚙️ الإعدادات</div>
+    <div class="row3">
+      <div class="field"><label>الكلمة السرية</label><input type="text" id="word-input" placeholder="اكتب الكلمة..."></div>
+      <div class="field"><label>التلميح (اختياري)</label><input type="text" id="hint-input" placeholder="مثال: حيوان"></div>
+      <div class="field"><label>الوقت (ثواني)</label><input type="number" id="time-input" value="60" min="15" max="180"></div>
+    </div>
+    <div class="actions" style="margin-bottom:10px">
+      <button class="btn" onclick="startRound()" style="flex:1;background:var(--green);color:#fff">▶ ابدأ الجولة</button>
+      <button class="btn" onclick="stopRound()" style="flex:1;background:var(--red);color:#fff">⏹ إيقاف</button>
+      <button class="btn" onclick="randomWord()" style="flex:1;background:var(--purple);color:#fff">🎲 كلمة عشوائية</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🗂️ بنك الكلمات</div>
+    <div class="word-bank" id="word-bank"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎨 لوحة الرسم</div>
+    <div class="tools" id="tools">
+      <div class="color-btn active" style="background:#000" onclick="setColor('#000',this)"></div>
+      <div class="color-btn" style="background:#ef4444" onclick="setColor('#ef4444',this)"></div>
+      <div class="color-btn" style="background:#f59e0b" onclick="setColor('#f59e0b',this)"></div>
+      <div class="color-btn" style="background:#22c55e" onclick="setColor('#22c55e',this)"></div>
+      <div class="color-btn" style="background:#3b82f6" onclick="setColor('#3b82f6',this)"></div>
+      <div class="color-btn" style="background:#a855f7" onclick="setColor('#a855f7',this)"></div>
+      <div class="color-btn" style="background:#ec4899" onclick="setColor('#ec4899',this)"></div>
+      <div class="color-btn" style="background:#fff;border:1px solid #ccc" onclick="setColor('#ffffff',this)"></div>
+      <input type="color" value="#000000" onchange="setColor(this.value)" style="width:28px;height:28px;border:none;cursor:pointer;border-radius:50%;padding:0">
+      <span style="margin:0 6px;color:var(--border)">|</span>
+      <button class="size-btn" onclick="setSize(3,this)">رفيع</button>
+      <button class="size-btn active" onclick="setSize(6,this)">متوسط</button>
+      <button class="size-btn" onclick="setSize(12,this)">سميك</button>
+      <button class="size-btn" onclick="setSize(24,this)">عريض</button>
+      <span style="margin:0 6px;color:var(--border)">|</span>
+      <button class="tool-btn eraser" id="eraser-btn" onclick="toggleEraser()">🧹 ممحاة</button>
+      <button class="tool-btn" onclick="clearCanvas()" style="color:var(--red)">🗑️ مسح الكل</button>
+      <button class="tool-btn" onclick="undo()">↩️ تراجع</button>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="canvas" width="800" height="500"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">🏆 الفائزين (<span id="winner-count">0</span>)</div>
+    </div>
+    <div class="winners-list" id="winners-list"><div class="empty">لا يوجد فائزين بعد</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 رابط الـ Overlay</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="overlay-link" id="overlay-link" style="flex:1">—</div>
+      <button class="btn" onclick="copyLink()" style="background:var(--purple);color:#fff;padding:10px 16px;font-size:13px">📋 نسخ</button>
+    </div>
+  </div>
+</div>
+<script>
+var params = new URLSearchParams(location.search);
+var username = params.get('username') || '';
+var socket = io();
+if (username) socket.emit('join', { username });
+
+document.getElementById('overlay-link').textContent = location.origin + '/draw-overlay.html?username=' + username;
+function copyLink() {
+  navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);
+  document.getElementById('overlay-link').style.borderColor = '#1dba72';
+  setTimeout(function(){ document.getElementById('overlay-link').style.borderColor = ''; }, 1000);
+}
+
+var WORDS = [
+  {w:"قطة",h:"حيوان"},{w:"كلب",h:"حيوان"},{w:"سمكة",h:"حيوان"},{w:"طائر",h:"حيوان"},{w:"فراشة",h:"حيوان"},{w:"أسد",h:"حيوان"},{w:"فيل",h:"حيوان"},{w:"زرافة",h:"حيوان"},{w:"ثعبان",h:"حيوان"},{w:"سلحفاة",h:"حيوان"},
+  {w:"شمس",h:"طبيعة"},{w:"قمر",h:"طبيعة"},{w:"نجمة",h:"طبيعة"},{w:"شجرة",h:"طبيعة"},{w:"وردة",h:"طبيعة"},{w:"جبل",h:"طبيعة"},{w:"بحر",h:"طبيعة"},{w:"مطر",h:"طبيعة"},{w:"سحابة",h:"طبيعة"},{w:"قوس قزح",h:"طبيعة"},
+  {w:"سيارة",h:"نقل"},{w:"طائرة",h:"نقل"},{w:"قطار",h:"نقل"},{w:"دراجة",h:"نقل"},{w:"سفينة",h:"نقل"},{w:"صاروخ",h:"فضاء"},{w:"هليكوبتر",h:"نقل"},
+  {w:"بيت",h:"مبنى"},{w:"مسجد",h:"مبنى"},{w:"قلعة",h:"مبنى"},{w:"برج",h:"مبنى"},{w:"جسر",h:"مبنى"},
+  {w:"تفاحة",h:"فاكهة"},{w:"موزة",h:"فاكهة"},{w:"برتقالة",h:"فاكهة"},{w:"بطيخة",h:"فاكهة"},{w:"فراولة",h:"فاكهة"},
+  {w:"كرة قدم",h:"رياضة"},{w:"كرة سلة",h:"رياضة"},{w:"سباحة",h:"رياضة"},{w:"ملاكمة",h:"رياضة"},
+  {w:"ساعة",h:"أداة"},{w:"مفتاح",h:"أداة"},{w:"مقص",h:"أداة"},{w:"نظارة",h:"أداة"},{w:"هاتف",h:"تكنولوجيا"},{w:"لابتوب",h:"تكنولوجيا"},{w:"كاميرا",h:"تكنولوجيا"},
+  {w:"بيتزا",h:"طعام"},{w:"برجر",h:"طعام"},{w:"آيس كريم",h:"طعام"},{w:"كيك",h:"طعام"},{w:"قهوة",h:"مشروب"},
+  {w:"كتاب",h:"أداة"},{w:"قلم",h:"أداة"},{w:"كرسي",h:"أثاث"},{w:"طاولة",h:"أثاث"},{w:"سرير",h:"أثاث"},
+  {w:"قلب",h:"شكل"},{w:"نجمة",h:"شكل"},{w:"مثلث",h:"شكل"},{w:"دائرة",h:"شكل"},
+];
+var usedWords = new Set();
+
+function renderBank() {
+  document.getElementById('word-bank').innerHTML = WORDS.map(function(w,i){
+    return '<span class="word-chip '+(usedWords.has(i)?'used':'')+'" onclick="pickWord('+i+')">'+w.w+'</span>';
+  }).join('');
+}
+
+function pickWord(i) {
+  document.getElementById('word-input').value = WORDS[i].w;
+  document.getElementById('hint-input').value = WORDS[i].h;
+  usedWords.add(i);
+  renderBank();
+}
+
+function randomWord() {
+  var pool = WORDS.map(function(w,i){return{...w,idx:i};}).filter(function(w){return !usedWords.has(w.idx);});
+  if (!pool.length) { usedWords.clear(); pool = WORDS.map(function(w,i){return{...w,idx:i};}); }
+  var pick = pool[Math.floor(Math.random()*pool.length)];
+  pickWord(pick.idx);
+}
+
+// Canvas
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
+var drawing = false;
+var currentColor = '#000';
+var currentSize = 6;
+var isEraser = false;
+var strokes = []; // for undo
+var currentStroke = [];
+
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
+ctx.fillStyle = '#fff';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+function getPos(e) {
+  var rect = canvas.getBoundingClientRect();
+  var x = (e.clientX || e.touches[0].clientX) - rect.left;
+  var y = (e.clientY || e.touches[0].clientY) - rect.top;
+  return { x: x / rect.width * canvas.width, y: y / rect.height * canvas.height };
+}
+
+canvas.addEventListener('mousedown', function(e) { startDraw(getPos(e)); });
+canvas.addEventListener('mousemove', function(e) { if(drawing) draw(getPos(e)); });
+canvas.addEventListener('mouseup', endDraw);
+canvas.addEventListener('mouseleave', endDraw);
+canvas.addEventListener('touchstart', function(e) { e.preventDefault(); startDraw(getPos(e)); });
+canvas.addEventListener('touchmove', function(e) { e.preventDefault(); if(drawing) draw(getPos(e)); });
+canvas.addEventListener('touchend', endDraw);
+
+var lastPos = null;
+function startDraw(pos) {
+  drawing = true;
+  lastPos = pos;
+  currentStroke = [];
+  ctx.beginPath();
+  ctx.moveTo(pos.x, pos.y);
+  ctx.strokeStyle = isEraser ? '#ffffff' : currentColor;
+  ctx.lineWidth = isEraser ? currentSize * 3 : currentSize;
+  var pt = { x:pos.x, y:pos.y, color: isEraser?'#ffffff':currentColor, size: isEraser?currentSize*3:currentSize, new:true };
+  currentStroke.push(pt);
+  socket.emit('draw:stroke', { username, ...pt });
+}
+
+function draw(pos) {
+  ctx.lineTo(pos.x, pos.y);
+  ctx.stroke();
+  var pt = { x:pos.x, y:pos.y, color: isEraser?'#ffffff':currentColor, size: isEraser?currentSize*3:currentSize };
+  currentStroke.push(pt);
+  socket.emit('draw:stroke', { username, ...pt });
+  lastPos = pos;
+}
+
+function endDraw() {
+  if (drawing && currentStroke.length) strokes.push([...currentStroke]);
+  drawing = false;
+  ctx.beginPath();
+}
+
+function setColor(c, el) {
+  currentColor = c;
+  isEraser = false;
+  document.getElementById('eraser-btn').classList.remove('active');
+  document.querySelectorAll('.color-btn').forEach(function(b){b.classList.remove('active');});
+  if (el) el.classList.add('active');
+}
+
+function setSize(s, el) {
+  currentSize = s;
+  document.querySelectorAll('.size-btn').forEach(function(b){b.classList.remove('active');});
+  if (el) el.classList.add('active');
+}
+
+function toggleEraser() {
+  isEraser = !isEraser;
+  document.getElementById('eraser-btn').classList.toggle('active', isEraser);
+}
+
+function clearCanvas() {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  strokes = [];
+  socket.emit('draw:clear-canvas', { username });
+}
+
+function undo() {
+  if (!strokes.length) return;
+  strokes.pop();
+  // Redraw all strokes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  strokes.forEach(function(stroke) {
+    stroke.forEach(function(pt, i) {
+      ctx.strokeStyle = pt.color;
+      ctx.lineWidth = pt.size;
+      if (i === 0 || pt.new) { ctx.beginPath(); ctx.moveTo(pt.x, pt.y); }
+      else { ctx.lineTo(pt.x, pt.y); ctx.stroke(); }
+    });
+    ctx.beginPath();
+  });
+  // Send full redraw to overlay
+  socket.emit('draw:clear-canvas', { username });
+  strokes.forEach(function(stroke) {
+    stroke.forEach(function(pt) { socket.emit('draw:stroke', { username, ...pt }); });
+  });
+}
+
+// Game controls
+async function startRound() {
+  var word = document.getElementById('word-input').value.trim();
+  var hint = document.getElementById('hint-input').value.trim();
+  var time = parseInt(document.getElementById('time-input').value) || 60;
+  if (!word) { alert('اكتب الكلمة'); return; }
+  clearCanvas();
+  await fetch('/api/draw/start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username, word, hint, answerTime: time }) });
+  document.getElementById('status-badge').textContent = '🟢 جاري الرسم';
+  document.getElementById('status-badge').classList.add('active');
+  document.getElementById('winners-list').innerHTML = '<div class="empty">لا يوجد فائزين بعد</div>';
+  document.getElementById('winner-count').textContent = '0';
+}
+
+async function stopRound() {
+  await fetch('/api/draw/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+  document.getElementById('status-badge').textContent = 'متوقف';
+  document.getElementById('status-badge').classList.remove('active');
+}
+
+// Live updates
+var RANKS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+socket.on('draw:correct', function(d) {
+  document.getElementById('winner-count').textContent = d.total;
+  var el = document.getElementById('winners-list');
+  if (d.rank === 1) el.innerHTML = '';
+  var div = document.createElement('div');
+  div.className = 'winner-item';
+  div.innerHTML = '<span class="winner-rank">'+(RANKS[d.rank-1]||d.rank)+'</span><span class="winner-name">'+d.player+'</span>';
+  el.appendChild(div);
+});
+
+socket.on('draw:end', function(d) {
+  document.getElementById('status-badge').textContent = 'انتهى';
+  document.getElementById('status-badge').classList.remove('active');
+});
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+renderBank();
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Letter Race Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.main{position:relative;background:rgba(0,0,0,.92);border:2px solid rgba(34,197,94,.4);border-radius:22px;padding:24px 28px;width:580px;opacity:0;transition:opacity .15s;overflow:hidden}
+.main.show{opacity:1}
+.main::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#22c55e,#25f4ee,#22c55e)}
+
+.title{font-size:16px;color:rgba(255,255,255,.4);text-align:center;margin-bottom:8px}
+.title span{color:#22c55e;font-weight:900}
+
+.letter-box{text-align:center;margin-bottom:16px}
+.letter-char{font-size:72px;font-weight:900;color:#fff;text-shadow:0 0 30px rgba(34,197,94,.5);animation:letterPulse 2s ease infinite}
+.letter-sub{font-size:13px;color:rgba(255,255,255,.4);margin-top:4px}
+@keyframes letterPulse{0%,100%{text-shadow:0 0 20px rgba(34,197,94,.3)}50%{text-shadow:0 0 40px rgba(34,197,94,.6)}}
+
+.timer-bar{height:6px;background:rgba(255,255,255,.08);border-radius:3px;margin-bottom:14px;overflow:hidden}
+.timer-fill{height:100%;background:linear-gradient(90deg,#22c55e,#25f4ee);border-radius:3px;transition:width .2s linear}
+.timer-fill.warn{background:linear-gradient(90deg,#f59e0b,#ef4444)}
+
+.feed{display:flex;flex-direction:column;gap:4px;max-height:140px;overflow:hidden;margin-bottom:12px}
+.feed-item{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600;animation:slideIn .3s ease}
+.feed-item.word{background:rgba(34,197,94,.08);color:#22c55e}
+.feed-item.winner{background:rgba(255,215,0,.1);color:#ffd700}
+.feed-avatar{width:22px;height:22px;border-radius:50%;overflow:hidden;flex-shrink:0;border:1.5px solid rgba(255,255,255,.2)}
+.feed-avatar img{width:100%;height:100%;object-fit:cover}
+.feed-progress{margin-right:auto;font-size:11px;color:rgba(255,255,255,.3)}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+
+.winners-row{display:flex;justify-content:center;gap:12px;margin-bottom:8px}
+.winner-card{text-align:center;padding:8px 14px;background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.2);border-radius:12px;animation:winPop .4s ease}
+.winner-rank{font-size:24px}
+.winner-name{font-size:12px;font-weight:700;color:#ffd700;margin-top:2px}
+.winner-words{font-size:10px;color:rgba(255,255,255,.3);margin-top:2px}
+@keyframes winPop{0%{transform:scale(0)}100%{transform:scale(1)}}
+
+.result-overlay{position:absolute;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(10px);display:none;flex-direction:column;align-items:center;justify-content:center;border-radius:22px;z-index:10}
+.result-overlay.show{display:flex;animation:fadeIn .4s ease}
+.result-letter{font-size:48px;font-weight:900;color:#22c55e;margin-bottom:8px}
+.result-title{font-size:16px;color:rgba(255,255,255,.4);margin-bottom:16px}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+.confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+</style>
+</head>
+<body>
+<div class="main" id="box">
+  <div class="title">🏃 <span>سباق الحروف</span></div>
+  <div class="letter-box">
+    <div class="letter-char" id="letter-char">—</div>
+    <div class="letter-sub" id="letter-sub"></div>
+  </div>
+  <div class="timer-bar"><div class="timer-fill" id="timer-fill" style="width:100%"></div></div>
+  <div class="feed" id="feed"></div>
+  <div class="winners-row" id="winners-row"></div>
+  <div class="result-overlay" id="result-overlay">
+    <div class="result-letter" id="result-letter"></div>
+    <div class="result-title">انتهى الوقت!</div>
+    <div class="winners-row" id="result-winners" style="flex-wrap:wrap"></div>
+  </div>
+  <div class="confetti" id="confetti"></div>
+</div>
+<script>
+var params = new URLSearchParams(location.search);
+var username = params.get('username') || '';
+var socket = io();
+if (username) socket.emit('join', { username });
+
+var timerInt = null;
+var RANKS = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+var COLORS = ['#22c55e','#ffd700','#25f4ee','#a855f7','#ec4899','#f59e0b'];
+
+socket.on('letter-race:start', function(d) {
+  document.getElementById('box').classList.add('show');
+  document.getElementById('result-overlay').classList.remove('show');
+  document.getElementById('letter-char').textContent = d.letter;
+  document.getElementById('letter-sub').textContent = 'اكتب ' + d.wordsNeeded + ' كلمات تبدأ بحرف "' + d.letter + '"';
+  document.getElementById('feed').innerHTML = '';
+  document.getElementById('winners-row').innerHTML = '';
+  // Timer
+  var fill = document.getElementById('timer-fill');
+  fill.style.width = '100%';
+  fill.classList.remove('warn');
+  var total = d.answerTime * 1000, start = Date.now();
+  if (timerInt) clearInterval(timerInt);
+  timerInt = setInterval(function() {
+    var pct = Math.max(0, 100 - (Date.now() - start) / total * 100);
+    fill.style.width = pct + '%';
+    if (pct < 25) fill.classList.add('warn');
+    if (pct <= 0) { clearInterval(timerInt); timerInt = null; }
+  }, 50);
+});
+
+socket.on('letter-race:word', function(d) {
+  var el = document.getElementById('feed');
+  var div = document.createElement('div');
+  div.className = 'feed-item word';
+  var avHtml = d.avatar ? '<div class="feed-avatar"><img src="'+d.avatar+'"></div>' : '';
+  div.innerHTML = avHtml + '<span>' + esc(d.player) + ': <strong>' + esc(d.word) + '</strong></span><span class="feed-progress">' + d.playerWords + '/' + d.needed + '</span>';
+  el.prepend(div);
+  while (el.children.length > 8) el.removeChild(el.lastChild);
+});
+
+socket.on('letter-race:winner', function(d) {
+  // Add winner card
+  var el = document.getElementById('winners-row');
+  var div = document.createElement('div');
+  div.className = 'winner-card';
+  div.innerHTML = '<div class="winner-rank">' + (RANKS[d.rank-1]||d.rank) + '</div><div class="winner-name">' + esc(d.player) + '</div><div class="winner-words">' + d.words.map(function(w){return esc(w);}).join(' • ') + '</div>';
+  el.appendChild(div);
+  // Feed
+  var feed = document.getElementById('feed');
+  var fi = document.createElement('div');
+  fi.className = 'feed-item winner';
+  fi.innerHTML = (RANKS[d.rank-1]||'') + ' <strong>' + esc(d.player) + '</strong> أنهى!';
+  feed.prepend(fi);
+  while (feed.children.length > 8) feed.removeChild(feed.lastChild);
+  // Confetti for first winner
+  if (d.rank === 1) fireConfetti();
+});
+
+socket.on('letter-race:end', function(d) {
+  if (timerInt) { clearInterval(timerInt); timerInt = null; }
+  document.getElementById('result-letter').textContent = d.letter;
+  var rw = document.getElementById('result-winners');
+  rw.innerHTML = (d.winners||[]).map(function(w,i) {
+    return '<div class="winner-card"><div class="winner-rank">'+(RANKS[i]||i+1)+'</div><div class="winner-name">'+esc(w.name)+'</div><div class="winner-words">'+w.words.map(function(x){return esc(x);}).join(' • ')+'</div></div>';
+  }).join('') || '<div style="color:rgba(255,255,255,.3);font-size:13px">ما أحد أنهى 😅</div>';
+  document.getElementById('result-overlay').classList.add('show');
+});
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function fireConfetti(){var layer=document.getElementById('confetti'),box=document.getElementById('box'),cx=box.offsetWidth/2,cy=box.offsetHeight/2;for(var i=0;i<35;i++){var p=document.createElement('div');p.style.cssText='position:absolute;width:7px;height:11px;left:'+cx+'px;top:'+cy+'px;background:'+COLORS[i%COLORS.length]+';border-radius:2px;';layer.appendChild(p);var a=Math.random()*Math.PI*2,d=80+Math.random()*200;p.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:'translate('+Math.cos(a)*d+'px,'+Math.sin(a)*d+'px) rotate('+(600+Math.random()*600)+'deg)',opacity:0}],{duration:1400+Math.random()*500,easing:'cubic-bezier(0.4,0,0.6,1)'});setTimeout(function(el){el.remove()}.bind(null,p),2000);}}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

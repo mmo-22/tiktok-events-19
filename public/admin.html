@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>فعاليات تيك توك — لوحة الأدمن</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root{
+  --bg:#06060b;--glass:rgba(255,255,255,.04);--glass2:rgba(255,255,255,.07);
+  --border:rgba(255,255,255,.1);--border-h:rgba(255,255,255,.2);
+  --accent:#0891b2;--accent2:#22d3ee;--gold:#f5c542;--purple:#a855f7;
+  --text:#e8eaf2;--muted:#9ca3af;
+  --green:#22c55e;--amber:#f59e0b;--red:#ef4444
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;min-height:100vh;position:relative}
+
+/* خلفية متحركة بـ blobs */
+.bg{position:fixed;inset:0;overflow:hidden;z-index:0;pointer-events:none}
+.blob{position:absolute;border-radius:50%;filter:blur(80px);opacity:.5;animation:float 18s infinite ease-in-out}
+.b1{width:500px;height:500px;background:#0891b2;top:-150px;right:-100px;animation-delay:0s}
+.b2{width:420px;height:420px;background:#a855f7;bottom:-120px;left:-80px;animation-delay:-6s}
+.b3{width:380px;height:380px;background:#dc2626;top:30%;left:40%;animation-delay:-12s;opacity:.3}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(50px,-30px) scale(1.1)}66%{transform:translate(-30px,40px) scale(.9)}}
+
+.wrap{position:relative;z-index:1;padding:18px;max-width:1280px;margin:0 auto}
+
+/* Glass card style */
+.glass{
+  background:var(--glass);
+  backdrop-filter:blur(24px) saturate(140%);
+  -webkit-backdrop-filter:blur(24px) saturate(140%);
+  border:1px solid var(--border);border-radius:20px;
+  box-shadow:0 8px 32px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.08);
+  transition:.3s
+}
+.glass:hover{background:var(--glass2);border-color:var(--border-h)}
+
+/* Top */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand .logo{
+  width:42px;height:42px;border-radius:13px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex;align-items:center;justify-content:center;font-weight:900;font-size:1.3rem;
+  box-shadow:0 0 24px rgba(34,211,238,.4)
+}
+.brand .nm{font-weight:900;font-size:1.1rem}
+.brand .sub{font-size:.7rem;color:var(--accent2)}
+.top-right{display:flex;align-items:center;gap:10px}
+.live-pill{display:flex;align-items:center;gap:8px;padding:7px 16px;border-radius:30px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);color:#fecaca;font-weight:900;font-size:.8rem}
+.live-pill.off{background:rgba(255,255,255,.05);border-color:var(--border);color:var(--muted)}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#ef4444;box-shadow:0 0 14px #ef4444;animation:pulse 1.4s infinite}
+.live-pill.off .live-dot{background:var(--muted);box-shadow:none;animation:none}
+@keyframes pulse{50%{opacity:.4}}
+.ver-pill{padding:7px 14px;border-radius:30px;font-size:.7rem;font-weight:900;color:var(--muted);letter-spacing:.5px}
+
+/* Connect card */
+.connect{display:flex;gap:10px;align-items:center;padding:14px 18px;margin-bottom:18px;flex-wrap:wrap}
+.connect input{
+  background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text);
+  font-family:inherit;font-size:.9rem;padding:11px 16px;border-radius:14px;outline:none;
+  direction:ltr;transition:.2s;backdrop-filter:blur(10px)
+}
+.connect input:focus{border-color:var(--accent2);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.connect input::placeholder{color:var(--muted)}
+.connect .u-input{flex:1;min-width:180px}
+.connect .s-input{max-width:170px;font-size:.72rem;opacity:.65}
+.btn-connect{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#02131a;border:none;
+  font-family:inherit;font-size:.88rem;font-weight:900;padding:11px 24px;border-radius:14px;
+  cursor:pointer;white-space:nowrap;transition:.2s;box-shadow:0 0 20px rgba(34,211,238,.25)
+}
+.btn-connect:hover{transform:translateY(-1px);box-shadow:0 0 28px rgba(34,211,238,.45)}
+
+/* Hero (room) card */
+.hero{padding:22px;margin-bottom:14px;position:relative;overflow:hidden;cursor:pointer}
+.hero::before{content:"";position:absolute;top:-100px;right:-100px;width:300px;height:300px;background:radial-gradient(circle,rgba(34,211,238,.18),transparent 65%);pointer-events:none}
+.hero.sel{border-color:var(--accent2);box-shadow:0 8px 32px rgba(0,0,0,.3),0 0 0 1px rgba(34,211,238,.35),inset 0 1px 0 rgba(255,255,255,.08)}
+.hero-row{display:flex;align-items:center;gap:18px;position:relative}
+.hero-av{
+  width:72px;height:72px;border-radius:50%;
+  background:linear-gradient(135deg,#dc2626,#f59e0b);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:1.8rem;border:3px solid var(--gold);
+  box-shadow:0 0 0 6px rgba(245,197,66,.15),0 0 30px rgba(245,197,66,.3);flex-shrink:0
+}
+.hero-info{flex:1;min-width:0}
+.hero-info h1{font-size:1.3rem;font-weight:900;margin-bottom:2px;direction:ltr;text-align:right}
+.hero-info .st{font-size:.8rem;font-weight:900;display:flex;align-items:center;gap:7px}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--muted)}
+.dot.connected{background:var(--green);box-shadow:0 0 10px var(--green);animation:pulse 1.5s infinite}
+.dot.connecting,.dot.retrying{background:var(--amber);box-shadow:0 0 10px var(--amber);animation:pulse .8s infinite}
+.dot.error,.dot.ended,.dot.disconnected{background:var(--red)}
+.st.connected{color:#86efac}.st.connecting,.st.retrying{color:#fcd34d}
+.st.error,.st.ended,.st.disconnected{color:#fca5a5}.st.idle{color:var(--muted)}
+.hero-info .meta{color:var(--muted);font-size:.78rem;margin-top:8px;display:flex;gap:14px;flex-wrap:wrap}
+.hero-info .meta span{display:flex;align-items:center;gap:5px}
+.hero-info .meta b{color:var(--text)}
+.hero-actions{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.hbtn{padding:9px 15px;border:1px solid var(--border-h);background:rgba(255,255,255,.04);color:var(--text);border-radius:14px;font-family:inherit;font-weight:900;font-size:.78rem;cursor:pointer;transition:.2s;backdrop-filter:blur(10px)}
+.hbtn:hover{background:rgba(255,255,255,.08);border-color:var(--accent2)}
+.hbtn.danger{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:#fca5a5}
+.hbtn.danger:hover{background:rgba(239,68,68,.25);border-color:var(--red)}
+
+/* KPI strip */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.kpi{padding:16px 18px;position:relative;overflow:hidden}
+.kpi .label{font-size:.74rem;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px;font-weight:700}
+.kpi .val{font-size:1.7rem;font-weight:900}
+.kpi .glow{position:absolute;top:-30px;left:-30px;width:120px;height:120px;border-radius:50%;filter:blur(40px);opacity:.4}
+
+/* Main grid */
+.grid{display:grid;grid-template-columns:1fr 360px;gap:18px}
+@media(max-width:1000px){.grid{grid-template-columns:1fr}}
+
+/* Activities */
+.acts-card{padding:18px}
+.section-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.section-h h3{font-size:1rem;font-weight:900}
+.section-h .count{background:var(--glass2);border:1px solid var(--border);color:var(--muted);padding:3px 12px;border-radius:14px;font-size:.7rem;font-weight:900}
+.acts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
+.act{
+  background:var(--glass);border:1px solid var(--border);border-radius:16px;
+  padding:14px 10px;text-align:center;cursor:pointer;transition:.25s;
+  position:relative;overflow:hidden;text-decoration:none;display:block
+}
+.act:hover{transform:translateY(-3px);background:var(--glass2);border-color:var(--accent2);box-shadow:0 8px 20px rgba(0,0,0,.3)}
+.act .ico{font-size:1.6rem;margin-bottom:6px;filter:drop-shadow(0 0 12px currentColor)}
+.act .nm{font-size:.76rem;font-weight:900;color:var(--text)}
+
+/* Activity feed */
+.feed-card{padding:18px;display:flex;flex-direction:column}
+.feed-list{display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:hidden}
+.fe{
+  display:flex;gap:10px;padding:9px 12px;border-radius:14px;
+  background:var(--glass);border:1px solid var(--border);
+  animation:slideIn .4s;align-items:center
+}
+@keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1}}
+.fe .av{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.75rem;background:linear-gradient(135deg,var(--purple),#6d28d9);overflow:hidden}
+.fe .av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.fe .body{flex:1;min-width:0}
+.fe .nm{font-weight:900;font-size:.78rem}
+.fe .msg{font-size:.74rem;color:var(--muted);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fe.gift{background:linear-gradient(145deg,rgba(245,197,66,.12),rgba(245,197,66,.02));border-color:rgba(245,197,66,.3)}
+.fe.gift .msg{color:#fde68a}
+.feed-empty{text-align:center;color:var(--muted);font-size:.78rem;padding:30px 10px}
+
+/* Empty state */
+.empty{text-align:center;color:var(--muted);padding:50px 20px;font-size:.9rem;margin-bottom:18px}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(12,12,22,.85);backdrop-filter:blur(20px);border:1px solid var(--border-h);color:var(--text);padding:11px 22px;border-radius:14px;font-size:.8rem;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none;z-index:100}
+.toast.show{opacity:1}
+
+@media(max-width:720px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .hero-row{flex-wrap:wrap}
+  .hero-actions{width:100%}
+}
+@media(max-width:520px){
+  input,select,textarea,.input,.select{font-size:16px !important}
+  .wrap{padding:12px 10px}
+  .topbar{padding:12px 14px}
+  .brand .logo{width:36px;height:36px;font-size:1.1rem}
+  .brand .nm{font-size:.95rem}
+  .connect{flex-direction:column;align-items:stretch;gap:8px}
+  .connect .s-input{max-width:none}
+  .connect .u-input{min-width:0}
+  .btn-connect{width:100%;padding:13px}
+  .hero{padding:16px}
+  .hero-av{width:54px;height:54px;font-size:1.3rem}
+  .hero-info h1{font-size:1.05rem}
+  .hero-actions{gap:6px}
+  .hbtn{padding:10px 8px;font-size:.72rem;flex:1;text-align:center}
+  .kpis{gap:8px}
+  .kpi{padding:12px 14px}
+  .kpi .val{font-size:1.35rem}
+  .kpi .label{font-size:.66rem}
+  .acts-grid{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+  .act{padding:12px 6px}
+  .act .ico{font-size:1.3rem}
+  .act .nm{font-size:.68rem}
+  .feed-list{max-height:320px}
+  .live-pill{padding:6px 12px;font-size:.72rem}
+}
+</style>
+</head>
+<body>
+
+<div class="bg">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+</div>
+
+<div class="wrap">
+
+  <!-- Top -->
+  <div class="topbar glass">
+    <div class="brand">
+      <div class="logo">🎉</div>
+      <div>
+        <div class="nm">فعاليات تيك توك</div>
+        <div class="sub">Glass Hub</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <span class="live-pill off" id="live-pill"><span class="live-dot"></span> <span id="live-txt">غير متصل</span></span>
+      <span class="ver-pill glass" id="version-badge">...</span>
+    </div>
+  </div>
+
+  <!-- Connect -->
+  <div class="connect glass">
+    <input type="text" id="session-input" placeholder="sessionid" dir="ltr" class="s-input">
+    <input type="text" id="username-input" placeholder="@username" dir="ltr" class="u-input">
+    <button class="btn-connect" onclick="addRoom()">+ اتصل</button>
+  </div>
+
+  <!-- Rooms -->
+  <div id="rooms"></div>
+
+  <!-- KPIs -->
+  <div class="kpis" id="kpis" style="display:none">
+    <div class="kpi glass">
+      <div class="glow" style="background:#22d3ee"></div>
+      <div class="label">👥 المشاهدين</div>
+      <div class="val" id="kv">0</div>
+    </div>
+    <div class="kpi glass">
+      <div class="glow" style="background:#a855f7"></div>
+      <div class="label">💖 الإعجابات</div>
+      <div class="val" id="kl">0</div>
+    </div>
+    <div class="kpi glass">
+      <div class="glow" style="background:#22c55e"></div>
+      <div class="label">💎 متابعين جدد</div>
+      <div class="val" id="kf">0</div>
+    </div>
+    <div class="kpi glass">
+      <div class="glow" style="background:#f5c542"></div>
+      <div class="label">🎁 الهدايا</div>
+      <div class="val" id="kg">0</div>
+    </div>
+  </div>
+
+  <!-- Main grid -->
+  <div class="grid" id="main-grid" style="display:none">
+
+    <!-- Activities -->
+    <div class="acts-card glass">
+      <div class="section-h">
+        <h3>🎮 الفعاليات</h3>
+        <span class="count" id="games-count"></span>
+      </div>
+      <div class="acts-grid" id="games-grid"></div>
+    </div>
+
+    <!-- Feed -->
+    <div class="feed-card glass">
+      <div class="section-h">
+        <h3>⚡ النشاط الحي</h3>
+        <span class="count" id="feed-room">—</span>
+      </div>
+      <div class="feed-list" id="feed">
+        <div class="feed-empty">بانتظار الأحداث...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="empty glass" id="empty-state">لا يوجد اتصالات — أضف يوزرنيم فوق واضغط اتصل 🚀</div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const socket = io();
+const GAMES = [
+  {icon:'🎰',name:'العجلة',page:'wheel.html',color:'#ffd700'},
+  {icon:'🎴',name:'البطاقات',page:'slot-game.html',color:'#a57afa'},
+  {icon:'🔤',name:'خمن الكلمة',page:'word-game.html',color:'#25f4ee'},
+  {icon:'💡',name:'خمن الرقم',page:'guess-game.html',color:'#a78bfa'},
+  {icon:'🎭',name:'خمن الشخصية',page:'person-game.html',color:'#ff6b9d'},
+  {icon:'⏰',name:'العد التنازلي',page:'countdown-game.html',color:'#f59e0b'},
+  {icon:'📦',name:'الصندوق الغامض',page:'mystery-game.html',color:'#ffd700'},
+  {icon:'📸',name:'تحدي الصور',page:'photo-challenge.html',color:'#fb923c'},
+  {icon:'🔐',name:'كلمة السر',page:'secret-word.html',color:'#a855f7'},
+  {icon:'⚔️',name:'حرب الكلمات',page:'word-war.html',color:'#ef4444'},
+  {icon:'🔊',name:'الأصوات',page:'sounds.html',color:'#1dba72'},
+  {icon:'🧠',name:'تحدي الذاكرة',page:'memory-game.html',color:'#a855f7'},
+  {icon:'💰',name:'من سيربح المليون',page:'million-game.html',color:'#ffd700'},
+  {icon:'🏆',name:'بطولة خروج',page:'knockout-game.html',color:'#ef4444'},
+  {icon:'🖼️',name:'ما هذا الرسم',page:'draw-game.html',color:'#a855f7'},
+  {icon:'🏃',name:'سباق الحروف',page:'letter-race.html',color:'#22c55e'},
+  {icon:'💬',name:'مزاد الكلمات',page:'auction.html',color:'#fbbf24'},
+  {icon:'🧊',name:'الجليد',page:'ice-game.html',color:'#38bdf8'},
+  {icon:'🏁',name:'سباق الخيل',page:'horse-race.html',color:'#a855f7'},
+  {icon:'🏰',name:'حرب القلاع',page:'castle-war.html',color:'#ef4444'},
+  {icon:'☠️',name:'الروليت الروسي',page:'roulette.html',color:'#dc2626'},
+  {icon:'⏱️',name:'خمن الوقت',page:'guess-time.html',color:'#fbbf24'},
+  {icon:'🦑',name:'لعبة الحبار',page:'squid-game.html',color:'#ff5f8f'},
+];
+
+let roomsData = {};
+let selectedRoom = null;
+
+const AV_GRADS = ['linear-gradient(135deg,#dc2626,#f59e0b)','linear-gradient(135deg,#0891b2,#22d3ee)','linear-gradient(135deg,#a855f7,#6d28d9)','linear-gradient(135deg,#22c55e,#16a34a)'];
+
+async function apiFetch(url, opts={}) {
+  return fetch(url, {...opts, headers:{'Content-Type':'application/json',...(opts.headers||{})}});
+}
+
+function statusLabel(s) {
+  return {connected:'متصل',connecting:'جاري الاتصال',disconnected:'منقطع',error:'خطأ',retrying:'إعادة المحاولة',ended:'انتهى البث',idle:'غير نشط'}[s]||s;
+}
+
+function fmt(n){return (n||0).toLocaleString('en-US');}
+
+function render() {
+  const container = document.getElementById('rooms');
+  const keys = Object.keys(roomsData);
+  const empty = document.getElementById('empty-state');
+  const kpis = document.getElementById('kpis');
+  const grid = document.getElementById('main-grid');
+
+  if (!keys.length) {
+    container.innerHTML = '';
+    empty.style.display = 'block';
+    kpis.style.display = 'none';
+    grid.style.display = 'none';
+    selectedRoom = null;
+    updateLivePill();
+    return;
+  }
+  empty.style.display = 'none';
+  kpis.style.display = 'grid';
+  grid.style.display = 'grid';
+
+  if (!selectedRoom || !roomsData[selectedRoom]) selectRoom(keys[0], false);
+
+  container.innerHTML = keys.map((key, i) => {
+    const r = roomsData[key], s = r.status||'idle', st = r.stats||{};
+    return '<div class="hero glass'+(key===selectedRoom?' sel':'')+'" onclick="selectRoom(\''+key+'\')">'+
+      '<div class="hero-row">'+
+        '<div class="hero-av" style="background:'+AV_GRADS[i%AV_GRADS.length]+'">'+(r.username[0]||'?').toUpperCase()+'</div>'+
+        '<div class="hero-info">'+
+          '<h1>@'+r.username+'</h1>'+
+          '<div class="st '+s+'"><span class="dot '+s+'"></span>'+statusLabel(s)+'</div>'+
+          '<div class="meta">'+
+            '<span>👥 <b id="sv-'+r.username+'">'+fmt(st.viewers)+'</b> مشاهد</span>'+
+            '<span>💖 <b id="sl-'+r.username+'">'+fmt(st.likes)+'</b> إعجاب</span>'+
+            '<span>🎁 <b id="sd-'+r.username+'">'+fmt(st.diamonds)+'</b> هدية</span>'+
+            '<span>🔗 <b id="ss-'+r.username+'">'+fmt(st.shares)+'</b> مشاركة</span>'+
+          '</div>'+
+        '</div>'+
+        '<div class="hero-actions" onclick="event.stopPropagation()">'+
+          '<button class="hbtn" onclick="window.open(location.origin+\'/generator.html?u='+r.username+'\',\'_blank\')">🔗 OBS</button>'+
+          '<button class="hbtn" onclick="reconnectRoom(\''+r.username+'\')">🔄 اتصال</button>'+
+          '<button class="hbtn" onclick="disconnectRoom(\''+r.username+'\')">⏸ قطع</button>'+
+          '<button class="hbtn danger" onclick="removeRoom(\''+r.username+'\')">✕ حذف</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  renderGames();
+  updateKPIs();
+  updateLivePill();
+}
+
+function renderGames() {
+  if (!selectedRoom) return;
+  document.getElementById('games-count').textContent = GAMES.length + ' فعالية';
+  document.getElementById('games-grid').innerHTML = GAMES.map(g =>
+    '<a class="act" href="'+location.origin+'/'+g.page+'?username='+selectedRoom+'" target="_blank">'+
+      '<div class="ico" style="color:'+g.color+'">'+g.icon+'</div>'+
+      '<div class="nm">'+g.name+'</div>'+
+    '</a>'
+  ).join('');
+}
+
+function selectRoom(key, rerender=true) {
+  if (selectedRoom === key) return;
+  selectedRoom = key;
+  document.getElementById('feed-room').textContent = '@'+key;
+  clearFeed();
+  socket.emit('join', { username: key });
+  if (rerender) render();
+}
+
+function updateKPIs() {
+  const r = roomsData[selectedRoom];
+  if (!r) return;
+  const st = r.stats||{};
+  document.getElementById('kv').textContent = fmt(st.viewers);
+  document.getElementById('kl').textContent = fmt(st.likes);
+  document.getElementById('kf').textContent = '+'+fmt(st.followers);
+  document.getElementById('kg').textContent = fmt(st.diamonds);
+}
+
+function updateLivePill() {
+  const pill = document.getElementById('live-pill');
+  const txt = document.getElementById('live-txt');
+  const connected = Object.values(roomsData).filter(r=>r.status==='connected').length;
+  if (connected > 0) {
+    pill.classList.remove('off');
+    txt.textContent = 'مباشر · '+connected+(connected>1?' غرف':' غرفة');
+  } else {
+    pill.classList.add('off');
+    txt.textContent = 'غير متصل';
+  }
+}
+
+/* ===== Live feed ===== */
+function clearFeed(){
+  document.getElementById('feed').innerHTML = '<div class="feed-empty">بانتظار الأحداث...</div>';
+}
+function addFeedItem(item) {
+  const f = document.getElementById('feed');
+  const ph = f.querySelector('.feed-empty'); if (ph) ph.remove();
+  const d = document.createElement('div');
+  const isGift = item.type === 'gift';
+  d.className = 'fe' + (isGift ? ' gift' : '');
+  const avInner = item.avatar
+    ? '<img src="/api/img-proxy?url='+encodeURIComponent(item.avatar)+'" onerror="this.remove()">'
+    : (item.user||'?')[0];
+  const msg = isGift
+    ? '🎁 أرسل '+(item.giftName||'هدية')+(item.repeatCount>1?' × '+item.repeatCount:'')
+    : (item.comment||'');
+  d.innerHTML = '<div class="av">'+avInner+'</div>'+
+    '<div class="body"><div class="nm"></div><div class="msg"></div></div>';
+  d.querySelector('.nm').textContent = item.user || '';
+  d.querySelector('.msg').textContent = msg;
+  f.insertBefore(d, f.firstChild);
+  while (f.children.length > 10) f.removeChild(f.lastChild);
+}
+
+socket.on('history', (msgs) => {
+  clearFeed();
+  (msgs||[]).filter(m=>m.type==='chat'||m.type==='gift').slice(-10).forEach(addFeedItem);
+});
+socket.on('chat', addFeedItem);
+socket.on('gift', addFeedItem);
+
+/* ===== Rooms & stats ===== */
+apiFetch('/api/rooms').then(r=>r.json()).then(list=>{
+  list.forEach(r=>{roomsData[r.username]=r;});
+  render();
+});
+
+socket.on('room:status', ({username,status,viewers}) => {
+  if (status==='removed'){delete roomsData[username];render();return;}
+  if (!roomsData[username]) roomsData[username]={username,stats:{viewers:0,likes:0,diamonds:0,shares:0,followers:0}};
+  roomsData[username].status=status;
+  if (viewers) roomsData[username].stats.viewers=viewers;
+  render();
+});
+
+socket.on('room:stats', ({username,stats}) => {
+  if (!roomsData[username]) return;
+  roomsData[username].stats={...roomsData[username].stats,...stats};
+  const s = roomsData[username].stats;
+  const sv=document.getElementById('sv-'+username);if(sv)sv.textContent=fmt(s.viewers);
+  const sl=document.getElementById('sl-'+username);if(sl)sl.textContent=fmt(s.likes);
+  const sd=document.getElementById('sd-'+username);if(sd)sd.textContent=fmt(s.diamonds);
+  const ss=document.getElementById('ss-'+username);if(ss)ss.textContent=fmt(s.shares);
+  if (username===selectedRoom) updateKPIs();
+});
+
+/* ===== Actions ===== */
+async function addRoom() {
+  const input=document.getElementById('username-input'),sessionInput=document.getElementById('session-input');
+  const username=input.value.trim().replace('@','');
+  if (!username) return;
+  input.value='';
+  const res=await apiFetch('/api/connect',{method:'POST',body:JSON.stringify({username,sessionid:sessionInput.value.trim()})});
+  const data=await res.json();
+  if (data.ok){
+    roomsData[data.username]={username:data.username,status:'connecting',stats:{viewers:0,likes:0,diamonds:0,shares:0,followers:0}};
+    selectRoom(data.username, false);
+    render();
+    showToast('جاري الاتصال بـ @'+data.username);
+  }
+}
+async function removeRoom(u){
+  if(!confirm('حذف @'+u+'؟'))return;
+  await apiFetch('/api/disconnect',{method:'POST',body:JSON.stringify({username:u})});
+  delete roomsData[u];
+  if(selectedRoom===u)selectedRoom=null;
+  render();showToast('تم حذف @'+u);
+}
+async function reconnectRoom(u){
+  await apiFetch('/api/connect',{method:'POST',body:JSON.stringify({username:u})});
+  if(roomsData[u])roomsData[u].status='connecting';
+  render();showToast('جاري إعادة الاتصال...');
+}
+async function disconnectRoom(u){
+  await apiFetch('/api/disconnect',{method:'POST',body:JSON.stringify({username:u})});
+  if(roomsData[u])roomsData[u].status='disconnected';
+  render();showToast('تم قطع الاتصال');
+}
+
+document.getElementById('username-input').addEventListener('keydown',e=>{if(e.key==='Enter')addRoom();});
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+fetch('/api/version').then(r=>r.json()).then(d=>{document.getElementById('version-badge').textContent=d.version;}).catch(()=>{});
+</script>
+</body>
+</html>

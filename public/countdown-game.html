@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>العدّ التنازلي - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root { --bg:#0d0d14; --surface:#181824; --surface2:#242436; --border:#2d2d40; --text:#f0f0f5; --muted:#9a9ab0; --accent:#ff0050; --accent2:#25f4ee; --amber:#f59e0b; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Tajawal',sans-serif; padding:20px; min-height:100vh; }
+  .wrap { max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:14px; }
+  .header { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; background:var(--surface); border-radius:12px; }
+  .header h1 { font-size:22px; }
+  .badge { font-size:12px; padding:4px 12px; border-radius:20px; background:var(--surface2); color:var(--muted); }
+  .badge.active { background:#1dba72; color:#fff; }
+  .card { background:var(--surface); border-radius:14px; padding:16px; border:1px solid var(--border); }
+  .card-title { font-size:15px; font-weight:700; margin-bottom:12px; color:var(--accent2); }
+
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  .field input, .field textarea {
+    width:100%; padding:10px 12px; background:var(--surface2);
+    border:1px solid var(--border); border-radius:8px;
+    color:var(--text); font-family:inherit; font-size:14px;
+  }
+  .field textarea { resize:vertical; min-height:70px; }
+  .field input:focus, .field textarea:focus { outline:none; border-color:var(--accent2); }
+
+  .timer-display {
+    text-align:center; font-size:48px; font-weight:900; color:var(--accent2);
+    margin:8px 0; font-variant-numeric:tabular-nums;
+  }
+  .timer-display.warning { color:var(--amber); }
+  .timer-display.ended { color:var(--accent); }
+
+  .actions { display:flex; gap:8px; }
+  .btn { padding:12px 18px; border:none; border-radius:10px; font-family:inherit; font-weight:700; cursor:pointer; font-size:14px; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .btn-start { background:#1dba72; color:#fff; flex:1; }
+  .btn-stop { background:var(--accent); color:#fff; flex:1; }
+
+  .answer-list { display:flex; flex-direction:column; gap:6px; max-height:400px; overflow-y:auto; }
+  .answer-item {
+    display:flex; align-items:center; gap:10px;
+    padding:8px 12px; background:var(--surface2); border-radius:10px;
+    font-size:13px;
+  }
+  .answer-item.correct { background:rgba(29,186,114,.15); border:1px solid rgba(29,186,114,.35); }
+  .answer-av { width:28px; height:28px; border-radius:50%; overflow:hidden; background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:12px; }
+  .answer-av img { width:100%; height:100%; object-fit:cover; }
+  .answer-name { flex:1; font-weight:700; }
+  .answer-text { color:var(--muted); }
+  .answer-item.correct .answer-text { color:#1dba72; font-weight:700; }
+  .empty { text-align:center; padding:20px; color:var(--muted); font-size:13px; }
+
+  .winners-list { display:flex; flex-direction:column; gap:6px; }
+  .winner-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px; border-radius:10px;
+    background:linear-gradient(90deg,rgba(255,215,0,.15),rgba(255,215,0,.03));
+    border:1px solid rgba(255,215,0,.3);
+  }
+  .winner-rank { font-size:20px; }
+
+  .overlay-link {
+    background:var(--surface2); padding:10px; border-radius:8px;
+    font-family:monospace; font-size:12px; word-break:break-all;
+    cursor:pointer;
+  }
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="header">
+    <h1>⏰ العدّ التنازلي</h1>
+    <span class="badge" id="status-badge">متوقف</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎯 إعداد اللعبة</div>
+    <div class="field">
+      <label>الموقف / السؤال</label>
+      <textarea id="question" placeholder="مثال: اذكر دولة عربية"></textarea>
+    </div>
+    <div class="field">
+      <label>الإجابات الصحيحة (مفصولة بفواصل)</label>
+      <textarea id="answers" placeholder="السعودية, مصر, الأردن, الإمارات"></textarea>
+    </div>
+    <div class="field">
+      <label>مدة اللعبة (بالثواني)</label>
+      <input type="number" id="duration" value="30" min="5" max="600" step="5">
+    </div>
+
+    <div class="timer-display" id="timer-display" style="display:none">00:00</div>
+
+    <div class="actions">
+      <button class="btn btn-start" id="start-btn" onclick="startGame()">▶ ابدأ</button>
+      <button class="btn btn-stop" id="stop-btn" onclick="stopGame()" disabled>⏹ إيقاف</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💬 آخر 10 إجابات</div>
+    <div class="answer-list" id="answers-list">
+      <div class="empty">لا يوجد إجابات بعد</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🏆 الفائزون</div>
+    <div class="winners-list" id="winners-list">
+      <div class="empty">لا يوجد فائزين بعد</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">رابط OBS</div>
+    <div class="overlay-link" id="overlay-link" onclick="copyLink()">...</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">اضغط لنسخ</div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const username = params.get('username') || '';
+const socket = io();
+let timerInt = null;
+let gameEndTime = 0;
+
+document.getElementById('overlay-link').textContent = `${location.origin}/countdown-overlay.html?username=${username}`;
+
+if (username) socket.emit('join', { username });
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function startGame() {
+  const question = document.getElementById('question').value.trim();
+  const answers = document.getElementById('answers').value.trim();
+  const duration = parseInt(document.getElementById('duration').value) || 30;
+  if (!question) return alert('أدخل السؤال');
+  if (!answers) return alert('أدخل الإجابات الصحيحة');
+
+  const res = await fetch('/api/countdown/start', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, question, answers, duration }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    setActive(true);
+    startTimer(duration);
+    renderAnswers([]);
+    renderWinners([]);
+  }
+}
+
+async function stopGame() {
+  await fetch('/api/countdown/stop', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+}
+
+function setActive(on) {
+  document.getElementById('status-badge').textContent = on ? '🟢 نشط' : 'متوقف';
+  document.getElementById('status-badge').classList.toggle('active', on);
+  document.getElementById('start-btn').disabled = on;
+  document.getElementById('stop-btn').disabled = !on;
+  document.getElementById('timer-display').style.display = on ? 'block' : 'none';
+}
+
+function startTimer(seconds) {
+  gameEndTime = Date.now() + seconds * 1000;
+  const disp = document.getElementById('timer-display');
+  disp.classList.remove('warning','ended');
+  updateTimer();
+  if (timerInt) clearInterval(timerInt);
+  timerInt = setInterval(updateTimer, 200);
+}
+
+function updateTimer() {
+  const disp = document.getElementById('timer-display');
+  const rem = Math.max(0, gameEndTime - Date.now());
+  const sec = Math.ceil(rem / 1000);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  disp.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  if (sec <= 5 && sec > 0) disp.classList.add('warning');
+  if (rem <= 0) {
+    disp.classList.add('ended');
+    clearInterval(timerInt);
+    timerInt = null;
+  }
+}
+
+socket.on('countdown:answer', ({ recentAnswers }) => {
+  renderAnswers(recentAnswers || []);
+});
+
+socket.on('countdown:won', ({ winner, totalWinners }) => {
+  // التحكم يعرض كل الفائزين مش أول 3 فقط
+  fetch(`/api/countdown/${username}`).then(r => r.json()).then(d => {
+    renderWinners(d.winners || []);
+  });
+});
+
+socket.on('countdown:ended', ({ answers, winners, totalWinners }) => {
+  setActive(false);
+  if (timerInt) clearInterval(timerInt);
+  // اعرض الإجابات الصحيحة
+  const disp = document.getElementById('timer-display');
+  disp.textContent = '✅ انتهى';
+  disp.classList.add('ended');
+});
+
+function renderAnswers(list) {
+  const el = document.getElementById('answers-list');
+  if (!list.length) {
+    el.innerHTML = '<div class="empty">لا يوجد إجابات بعد</div>';
+    return;
+  }
+  el.innerHTML = list.slice().reverse().map(a => `
+    <div class="answer-item ${a.correct ? 'correct' : ''}">
+      <div class="answer-av">${a.avatar ? `<img src="${a.avatar}" onerror="this.parentElement.textContent='${esc(a.name[0])}'">` : esc(a.name[0])}</div>
+      <span class="answer-name">${esc(a.name)}</span>
+      <span class="answer-text">${esc(a.answer)}</span>
+      ${a.correct ? '<span style="color:#1dba72">✓</span>' : ''}
+    </div>
+  `).join('');
+}
+
+function renderWinners(list) {
+  const el = document.getElementById('winners-list');
+  if (!list.length) {
+    el.innerHTML = '<div class="empty">لا يوجد فائزين بعد</div>';
+    return;
+  }
+  const rankIcons = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  el.innerHTML = list.map((w, i) => `
+    <div class="winner-item">
+      <span class="winner-rank">${rankIcons[i] || '🏅'}</span>
+      <div class="answer-av">${w.avatar ? `<img src="${w.avatar}" onerror="this.parentElement.textContent='${esc(w.name[0])}'">` : esc(w.name[0])}</div>
+      <span class="answer-name">${esc(w.name)}</span>
+      <span style="color:#1dba72;font-weight:700">${esc(w.answer)}</span>
+      <span style="color:var(--muted);font-size:12px">${(w.time/1000).toFixed(1)}s</span>
+    </div>
+  `).join('');
+}
+
+function copyLink() {
+  navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);
+}
+
+// Load state
+if (username) {
+  fetch(`/api/countdown/${username}`).then(r => r.json()).then(d => {
+    if (d.active) {
+      document.getElementById('question').value = d.question;
+      setActive(true);
+      const remaining = Math.max(0, Math.ceil((d.endTime - Date.now()) / 1000));
+      if (remaining > 0) startTimer(remaining);
+    }
+    if (d.recentAnswers) renderAnswers(d.recentAnswers);
+    if (d.winners) renderWinners(d.winners);
+  });
+}
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

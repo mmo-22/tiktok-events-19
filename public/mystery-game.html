@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>صناديق الحظ - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root { --bg:#0d0d14; --surface:#181824; --surface2:#242436; --border:#2d2d40; --text:#f0f0f5; --muted:#9a9ab0; --accent:#ff0050; --accent2:#25f4ee; --gold:#ffd700; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Tajawal',sans-serif; padding:20px; min-height:100vh; }
+  .wrap { max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:14px; }
+  .header { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; background:var(--surface); border-radius:12px; }
+  .header h1 { font-size:22px; }
+  .badge { font-size:12px; padding:4px 12px; border-radius:20px; background:var(--surface2); color:var(--muted); }
+  .badge.active { background:#1dba72; color:#fff; }
+  .card { background:var(--surface); border-radius:14px; padding:16px; border:1px solid var(--border); }
+  .card-title { font-size:15px; font-weight:700; margin-bottom:12px; color:var(--accent2); }
+
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  .field input, .field textarea, .field select {
+    width:100%; padding:10px 12px; background:var(--surface2);
+    border:1px solid var(--border); border-radius:8px;
+    color:var(--text); font-family:inherit; font-size:14px;
+  }
+  .field textarea { resize:vertical; min-height:55px; }
+
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+  /* Box editor */
+  .box-editor {
+    background:var(--surface2); border-radius:10px; padding:12px;
+    margin-bottom:8px; border:1px solid var(--border);
+  }
+  .box-editor-header {
+    display:flex; align-items:center; gap:10px; margin-bottom:10px;
+    font-weight:900; color:var(--gold);
+  }
+  .box-num {
+    width:28px; height:28px; border-radius:50%;
+    background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:900;
+  }
+  .box-editor textarea { font-size:13px; min-height:50px; }
+  .del-box {
+    margin-right:auto; background:transparent; border:1px solid var(--accent);
+    color:var(--accent); padding:4px 10px; border-radius:6px; cursor:pointer;
+    font-size:12px; font-family:inherit;
+  }
+
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn { padding:10px 16px; border:none; border-radius:10px; font-family:inherit; font-weight:700; cursor:pointer; font-size:14px; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .btn-add { background:var(--surface2); border:1px dashed var(--border); color:var(--muted); width:100%; padding:12px; }
+  .btn-start { background:#1dba72; color:#fff; flex:1; }
+  .btn-stop { background:var(--accent); color:#fff; flex:1; }
+  .btn-open { background:var(--gold); color:#000; flex:1; }
+  .btn-skip { background:var(--surface2); border:1px solid var(--border); color:#fff; flex:1; }
+  .btn-reset { background:transparent; border:1px solid var(--border); color:var(--muted); flex:1; }
+
+  /* Boxes preview */
+  .boxes-grid {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(80px,1fr));
+    gap:10px;
+  }
+  .box-tile {
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg,#3a2510,#1a1a24);
+    border:2px solid var(--gold); border-radius:12px;
+    font-size:32px; cursor:pointer; transition:all 0.2s;
+    position:relative;
+  }
+  .box-tile:hover { transform:scale(1.05); }
+  .box-tile.opened { background:rgba(29,186,114,.1); border-color:#1dba72; opacity:.5; }
+  .box-tile.opened::after { content:'✓'; position:absolute; bottom:4px; right:4px; font-size:14px; color:#1dba72; }
+  .box-tile-num { position:absolute; top:4px; right:4px; font-size:11px; color:#aaa; }
+
+  .timer-display {
+    text-align:center; font-size:42px; font-weight:900; color:var(--accent2);
+    margin:8px 0; font-variant-numeric:tabular-nums;
+  }
+  .timer-display.warning { color:#f59e0b; }
+  .timer-display.ended { color:var(--accent); }
+
+  .answer-list { display:flex; flex-direction:column; gap:6px; max-height:300px; overflow-y:auto; }
+  .answer-item {
+    display:flex; align-items:center; gap:10px;
+    padding:8px 12px; background:var(--surface2); border-radius:10px;
+    font-size:13px;
+  }
+  .answer-item.correct { background:rgba(29,186,114,.15); border:1px solid rgba(29,186,114,.35); }
+  .answer-av { width:28px; height:28px; border-radius:50%; overflow:hidden; background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:12px; }
+  .answer-av img { width:100%; height:100%; object-fit:cover; }
+  .answer-name { flex:1; font-weight:700; }
+  .answer-text { color:var(--muted); }
+  .answer-item.correct .answer-text { color:#1dba72; font-weight:700; }
+  .empty { text-align:center; padding:20px; color:var(--muted); font-size:13px; }
+
+  .winner-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px; border-radius:10px;
+    background:linear-gradient(90deg,rgba(255,215,0,.15),rgba(255,215,0,.03));
+    border:1px solid rgba(255,215,0,.3); margin-bottom:6px;
+  }
+  .winner-rank { font-size:20px; }
+
+  .preset-list {
+    display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px;
+  }
+  .preset-chip {
+    padding:6px 12px; background:var(--surface2);
+    border:1px solid var(--border); border-radius:14px;
+    font-size:12px; cursor:pointer;
+  }
+  .preset-chip:hover { background:var(--accent2); color:#000; }
+
+  .overlay-link {
+    background:var(--surface2); padding:10px; border-radius:8px;
+    font-family:monospace; font-size:12px; word-break:break-all;
+    cursor:pointer;
+  }
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="header">
+    <h1>📦 صناديق الحظ</h1>
+    <span class="badge" id="status-badge">جاهز</span>
+  </div>
+
+  <!-- إعدادات عامة -->
+  <div class="card">
+    <div class="card-title">⚙️ الإعدادات</div>
+    <div class="row2">
+      <div class="field">
+        <label>عدد الفائزين لكل صندوق</label>
+        <input type="number" id="max-winners" value="3" min="1" max="10">
+      </div>
+      <div class="field">
+        <label>مدة كل صندوق (ثواني)</label>
+        <input type="number" id="duration" value="30" min="10" max="300" step="5">
+      </div>
+    </div>
+  </div>
+
+  <!-- تحديات جاهزة -->
+  <div class="card">
+    <div class="card-title">⚡ تحديات جاهزة (اضغط للإضافة)</div>
+    <div class="preset-list" id="preset-list"></div>
+  </div>
+
+  <!-- الصناديق -->
+  <div class="card">
+    <div class="card-title">📦 الصناديق وتحدياتها</div>
+    <div id="boxes-editor"></div>
+    <button class="btn btn-add" onclick="addBox()">+ إضافة صندوق</button>
+  </div>
+
+  <!-- التحكم -->
+  <div class="card">
+    <div class="card-title">🎮 التحكم</div>
+    <div id="timer-display" class="timer-display" style="display:none">00:00</div>
+    <div id="current-challenge" style="text-align:center;font-weight:700;color:var(--gold);margin-bottom:14px;display:none"></div>
+    <div class="actions">
+      <button class="btn btn-open" id="open-btn" onclick="openRandomBox()">🎁 افتح صندوق عشوائي</button>
+      <button class="btn btn-skip" id="skip-btn" onclick="skipBox()" disabled>⏭ تخطي</button>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn btn-reset" onclick="resetBoxes()">🔄 إعادة تعيين الصناديق</button>
+    </div>
+  </div>
+
+  <!-- معاينة الصناديق -->
+  <div class="card">
+    <div class="card-title">🗂️ حالة الصناديق</div>
+    <div class="boxes-grid" id="boxes-grid"></div>
+  </div>
+
+  <!-- آخر إجابات -->
+  <div class="card">
+    <div class="card-title">💬 آخر 10 إجابات</div>
+    <div class="answer-list" id="answers-list">
+      <div class="empty">لا يوجد إجابات بعد</div>
+    </div>
+  </div>
+
+  <!-- فائزو الصندوق الحالي -->
+  <div class="card">
+    <div class="card-title">🏆 فائزو الصندوق الحالي</div>
+    <div id="winners-list">
+      <div class="empty">افتح صندوق ليبدأ التحدي</div>
+    </div>
+  </div>
+
+  <!-- إجمالي المشاركين -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">📊 إجمالي المشاركين</div>
+      <button class="btn" style="font-size:12px;padding:4px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted)" onclick="clearStats()">مسح الكل</button>
+    </div>
+    <div id="all-players" style="max-height:300px;overflow-y:auto">
+      <div class="empty">لا يوجد مشاركين بعد</div>
+    </div>
+  </div>
+
+  <!-- رابط OBS -->
+  <div class="card">
+    <div class="card-title">رابط OBS</div>
+    <div class="overlay-link" id="overlay-link" onclick="copyLink()">...</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">اضغط لنسخ</div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const username = params.get('username') || '';
+const socket = io();
+let timerInt = null;
+let boxEndTime = 0;
+let boxes = [];
+
+document.getElementById('overlay-link').textContent = `${location.origin}/mystery-overlay.html?username=${username}`;
+
+if (username) socket.emit('join', { username });
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── Presets ───
+const PRESETS = [
+  { c:'اكتب اسم حيوان يبدأ بـ "ج"', a:'جمل, جراد, جربوع, جرذ, جمل, جاموس' },
+  { c:'اكتب اسم حيوان يبدأ بـ "أ"', a:'أرنب, أسد, أفعى, أخطبوط' },
+  { c:'اكتب دولة عربية', a:'السعودية, مصر, الأردن, الإمارات, الكويت, قطر, البحرين, عمان, اليمن, العراق, سوريا, لبنان, فلسطين, ليبيا, تونس, الجزائر, المغرب, السودان, موريتانيا, الصومال' },
+  { c:'اكتب فاكهة', a:'تفاح, موز, عنب, برتقال, مانجو, كمثرى, فراولة, أناناس, تمر, رمان, مشمش, خوخ, بطيخ, شمام' },
+  { c:'اكتب لون', a:'أحمر, أزرق, أخضر, أصفر, أبيض, أسود, برتقالي, بنفسجي, وردي, بني, رمادي, سماوي, ذهبي, فضي' },
+  { c:'اكتب نادي سعودي', a:'الهلال, النصر, الاتحاد, الأهلي, الشباب, الفيحاء, الاتفاق, الفتح, الرائد, ضمك, التعاون' },
+  { c:'اكتب ممثل سعودي', a:'ناصر القصبي, عبدالله السدحان, فايز المالكي, إبراهيم الحجاج, يعقوب الفرحان, خالد صقر, مصعب المالكي' },
+  { c:'اكتب أكلة سعودية', a:'كبسة, مندي, مطازيز, جريش, مرقوق, قرصان, مظبي, مكبوس, هريس, مسحب' },
+  { c:'اكتب اسم سيارة', a:'تويوتا, مرسيدس, بي ام دبليو, فيراري, لمبرغيني, بورش, هوندا, نيسان, هيونداي, كيا, لكزس' },
+  { c:'اكتب تطبيق على الهاتف', a:'واتساب, تيك توك, إنستقرام, سناب شات, يوتيوب, تويتر, فيسبوك, تلغرام' },
+  { c:'اكتب اسم صحابي', a:'أبو بكر, عمر, عثمان, علي, خالد بن الوليد, بلال, حمزة, سعد بن أبي وقاص' },
+  { c:'اكتب اسم نبي', a:'محمد, إبراهيم, موسى, عيسى, نوح, آدم, يوسف, يعقوب, داوود, سليمان, إسماعيل, إسحاق, زكريا, يحيى' },
+  { c:'اكتب اسم مدينة سعودية', a:'الرياض, جدة, مكة, المدينة, الدمام, تبوك, أبها, جازان, الطائف, الخبر, الباحة, القصيم, حائل' },
+  { c:'اكتب لاعب كرة قدم', a:'ميسي, رونالدو, نيمار, مبابي, صلاح, بنزيما, هالاند, الدوسري, سالم الدوسري' },
+  { c:'اكتب اسم فيلم', a:'تايتانيك, الأسد الملك, هاري بوتر, أفاتار, مهمة مستحيلة' },
+  { c:'اكتب لون قوس قزح', a:'أحمر, برتقالي, أصفر, أخضر, أزرق, نيلي, بنفسجي' },
+];
+
+const presetEl = document.getElementById('preset-list');
+PRESETS.forEach(p => {
+  const el = document.createElement('div');
+  el.className = 'preset-chip';
+  el.textContent = p.c;
+  el.title = `الإجابات: ${p.a}`;
+  el.onclick = () => addBox(p.c, p.a);
+  presetEl.appendChild(el);
+});
+
+// ─── Box editor ───
+function addBox(challenge, answers) {
+  const num = boxes.length + 1;
+  boxes.push({ id: num, challenge: challenge || '', answers: answers || '' });
+  renderEditor();
+}
+
+function delBox(idx) {
+  boxes.splice(idx, 1);
+  // إعادة ترقيم
+  boxes.forEach((b, i) => b.id = i + 1);
+  renderEditor();
+}
+
+function updateBox(idx, field, val) {
+  boxes[idx][field] = val;
+}
+
+function renderEditor() {
+  const el = document.getElementById('boxes-editor');
+  if (!boxes.length) {
+    el.innerHTML = '<div class="empty">أضف صندوق ليبدأ</div>';
+    syncBoxes();
+    return;
+  }
+  el.innerHTML = boxes.map((b, i) => `
+    <div class="box-editor">
+      <div class="box-editor-header">
+        <span class="box-num">${b.id}</span>
+        <span>صندوق ${b.id}</span>
+        <button class="del-box" onclick="delBox(${i})">✕ حذف</button>
+      </div>
+      <div class="field">
+        <label>التحدي:</label>
+        <textarea oninput="updateBox(${i},'challenge',this.value)" placeholder="مثال: اكتب اسم حيوان يبدأ بـ ج">${esc(b.challenge)}</textarea>
+      </div>
+      <div class="field">
+        <label>الإجابات الصحيحة (مفصولة بفواصل):</label>
+        <textarea oninput="updateBox(${i},'answers',this.value)" placeholder="جمل, جراد, جربوع">${esc(b.answers)}</textarea>
+      </div>
+    </div>
+  `).join('');
+  syncBoxes();
+}
+
+let syncTimer = null;
+function syncBoxes() {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    const validBoxes = boxes.filter(b => b.challenge.trim() && b.answers.trim());
+    if (!validBoxes.length) {
+      renderBoxesGrid([]);
+      return;
+    }
+    const maxWinners = parseInt(document.getElementById('max-winners').value) || 3;
+    const duration = parseInt(document.getElementById('duration').value) || 30;
+    await fetch('/api/mystery/setup', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ username, boxes: validBoxes, maxWinners, duration }),
+    });
+  }, 600);
+}
+
+document.getElementById('max-winners').oninput = syncBoxes;
+document.getElementById('duration').oninput = syncBoxes;
+
+// ─── Game control ───
+async function openRandomBox() {
+  const res = await fetch('/api/mystery/open', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    alert(data.message || 'فشل');
+  }
+}
+
+async function skipBox() {
+  await fetch('/api/mystery/skip', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+}
+
+async function resetBoxes() {
+  if (!confirm('إعادة فتح كل الصناديق؟')) return;
+  await fetch('/api/mystery/reset', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+}
+
+async function clearStats() {
+  if (!confirm('مسح كل الإحصائيات؟')) return;
+  await fetch('/api/mystery/clear-stats', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+  document.getElementById('all-players').innerHTML = '<div class="empty">لا يوجد مشاركين بعد</div>';
+}
+
+// ─── Render ───
+function renderBoxesGrid(serverBoxes) {
+  const el = document.getElementById('boxes-grid');
+  if (!serverBoxes.length) {
+    el.innerHTML = '<div class="empty" style="grid-column:1/-1">لا توجد صناديق</div>';
+    return;
+  }
+  el.innerHTML = serverBoxes.map(b => `
+    <div class="box-tile ${b.opened ? 'opened' : ''}">
+      <span class="box-tile-num">${b.id}</span>
+      <span>${b.opened ? '✓' : '🎁'}</span>
+    </div>
+  `).join('');
+}
+
+function renderAnswers(list) {
+  const el = document.getElementById('answers-list');
+  if (!list || !list.length) {
+    el.innerHTML = '<div class="empty">لا يوجد إجابات بعد</div>';
+    return;
+  }
+  el.innerHTML = list.slice().reverse().map(a => `
+    <div class="answer-item ${a.correct ? 'correct' : ''}">
+      <div class="answer-av">${a.avatar ? `<img src="${a.avatar}" onerror="this.parentElement.textContent='${esc(a.name[0])}'">` : esc(a.name[0])}</div>
+      <span class="answer-name">${esc(a.name)}</span>
+      <span class="answer-text">${esc(a.answer)}</span>
+      ${a.correct ? '<span style="color:#1dba72">✓</span>' : ''}
+    </div>
+  `).join('');
+}
+
+function renderWinners(list) {
+  const el = document.getElementById('winners-list');
+  if (!list || !list.length) {
+    el.innerHTML = '<div class="empty">لا فائزون بعد</div>';
+    return;
+  }
+  const rankIcons = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  el.innerHTML = list.map((w, i) => `
+    <div class="winner-item">
+      <span class="winner-rank">${rankIcons[i] || '🏅'}</span>
+      <div class="answer-av">${w.avatar ? `<img src="${w.avatar}" onerror="this.parentElement.textContent='${esc(w.name[0])}'">` : esc(w.name[0])}</div>
+      <span class="answer-name">${esc(w.name)}</span>
+      <span style="color:#1dba72;font-weight:700">${esc(w.answer)}</span>
+    </div>
+  `).join('');
+}
+
+function renderAllPlayers(list) {
+  const el = document.getElementById('all-players');
+  if (!list || !list.length) {
+    el.innerHTML = '<div class="empty">لا يوجد مشاركين بعد</div>';
+    return;
+  }
+  el.innerHTML = list.map((p, i) => `
+    <div class="answer-item">
+      <div style="width:24px;font-weight:900;color:var(--gold)">${i+1}</div>
+      <div class="answer-av">${p.avatar ? `<img src="${p.avatar}" onerror="this.parentElement.textContent='${esc(p.name[0])}'">` : esc(p.name[0])}</div>
+      <span class="answer-name">${esc(p.name)}</span>
+      <span style="color:var(--accent2);font-weight:700">${p.totalWins} 🏆</span>
+    </div>
+  `).join('');
+}
+
+// ─── Timer ───
+function startTimer(endTime) {
+  boxEndTime = endTime;
+  document.getElementById('timer-display').style.display = 'block';
+  if (timerInt) clearInterval(timerInt);
+  updateTimer();
+  timerInt = setInterval(updateTimer, 200);
+}
+
+function updateTimer() {
+  const rem = Math.max(0, boxEndTime - Date.now());
+  const sec = Math.ceil(rem / 1000);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  const el = document.getElementById('timer-display');
+  el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  el.classList.remove('warning','ended');
+  if (sec <= 5 && sec > 0) el.classList.add('warning');
+  if (rem <= 0) {
+    el.classList.add('ended');
+    clearInterval(timerInt);
+    timerInt = null;
+  }
+}
+
+function setActive(on, challenge) {
+  document.getElementById('status-badge').textContent = on ? '🟢 نشط' : 'جاهز';
+  document.getElementById('status-badge').classList.toggle('active', on);
+  document.getElementById('open-btn').disabled = on;
+  document.getElementById('skip-btn').disabled = !on;
+  const ch = document.getElementById('current-challenge');
+  if (on && challenge) {
+    ch.style.display = 'block';
+    ch.textContent = `🎯 ${challenge}`;
+  } else {
+    ch.style.display = 'none';
+  }
+}
+
+// ─── Socket events ───
+socket.on('mystery:setup', ({ boxes: b }) => {
+  renderBoxesGrid(b || []);
+});
+
+socket.on('mystery:opened', ({ boxId, challenge, endTime, boxes: b }) => {
+  setActive(true, challenge);
+  startTimer(endTime);
+  renderBoxesGrid(b || []);
+  renderAnswers([]);
+  renderWinners([]);
+});
+
+socket.on('mystery:answer', ({ recentAnswers }) => {
+  renderAnswers(recentAnswers || []);
+});
+
+socket.on('mystery:won', ({ winner, winners }) => {
+  renderWinners(winners || []);
+  // حدّث الإجمالي
+  fetch(`/api/mystery/${username}`).then(r => r.json()).then(d => {
+    renderAllPlayers(d.allPlayers || []);
+  });
+});
+
+socket.on('mystery:timeUp', () => {
+  setActive(false);
+  document.getElementById('timer-display').classList.add('ended');
+  if (timerInt) clearInterval(timerInt);
+});
+
+function copyLink() {
+  navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);
+}
+
+// Load state
+if (username) {
+  fetch(`/api/mystery/${username}`).then(r => r.json()).then(d => {
+    if (d.allPlayers) renderAllPlayers(d.allPlayers);
+    if (d.boxes && d.boxes.length) renderBoxesGrid(d.boxes);
+    if (d.active && d.currentBox) {
+      setActive(true, d.currentBox.challenge);
+      startTimer(d.endTime);
+      renderWinners(d.currentBox.winners || []);
+    }
+  });
+}
+
+// Initial: ابدأ بصندوقين فارغين
+addBox();
+addBox();
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

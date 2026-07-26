@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Challenge Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.main{position:relative;background:rgba(0,0,0,.92);border:2px solid rgba(168,85,247,.5);border-radius:22px;padding:24px 32px;min-width:500px;max-width:700px;opacity:0;transition:opacity .15s;overflow:hidden}
+.main.show{opacity:1}
+
+.title{font-size:18px;color:rgba(255,255,255,.5);text-align:center;margin-bottom:10px}
+.title span{color:#a855f7;font-weight:900}
+
+.phase-label{text-align:center;font-size:14px;color:#fbbf24;font-weight:700;margin-bottom:12px}
+
+.sequence-box{text-align:center;padding:24px;margin-bottom:16px;border-radius:16px;background:rgba(168,85,247,.08);border:2px solid rgba(168,85,247,.3)}
+.sequence-text{font-size:48px;font-weight:900;color:#fff;letter-spacing:12px;font-family:monospace;direction:ltr}
+.sequence-hidden{font-size:36px;color:rgba(255,255,255,.2)}
+.sequence-timer{font-size:14px;color:#fbbf24;margin-top:8px}
+
+.round-badge{text-align:center;margin-bottom:12px}
+.round-badge span{display:inline-block;padding:4px 16px;background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.3);border-radius:20px;font-size:13px;font-weight:700;color:#a855f7}
+
+.stats-row{display:flex;justify-content:center;gap:20px;margin-bottom:14px;font-size:13px}
+.stat{text-align:center}
+.stat-num{font-size:22px;font-weight:900;color:#fff}
+.stat-label{color:rgba(255,255,255,.4);font-size:11px}
+
+.feed{max-height:120px;overflow:hidden;display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.feed-item{padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;animation:slideIn .3s ease}
+.feed-item.correct{background:rgba(29,186,114,.12);color:#1dba72}
+.feed-item.wrong{background:rgba(239,68,68,.12);color:#ef4444}
+.feed-item.join{background:rgba(168,85,247,.12);color:#a855f7}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+
+.winner-box{text-align:center;padding:20px;display:none}
+.winner-box.show{display:block;animation:winPop .5s cubic-bezier(0.34,1.56,0.64,1)}
+.winner-icon{font-size:48px;margin-bottom:8px}
+.winner-name{font-size:24px;font-weight:900;color:#ffd700}
+.winner-score{font-size:14px;color:rgba(255,255,255,.5);margin-top:4px}
+@keyframes winPop{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+
+.reg-banner{text-align:center;padding:16px}
+.reg-title{font-size:16px;font-weight:900;color:#fbbf24;margin-bottom:4px}
+.reg-keyword{font-size:22px;font-weight:900;color:#fff}
+.reg-count{font-size:13px;color:rgba(255,255,255,.4);margin-top:4px}
+
+.confetti-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+</style>
+</head>
+<body>
+<div class="main" id="box">
+  <div class="title">🧠 <span>تحدي الذاكرة</span></div>
+  <div class="round-badge" id="round-badge" style="display:none"><span id="round-text">الجولة 1</span></div>
+  <div class="phase-label" id="phase-label"></div>
+  <div class="stats-row" id="stats-row" style="display:none">
+    <div class="stat"><div class="stat-num" id="alive-count">0</div><div class="stat-label">باقي</div></div>
+    <div class="stat"><div class="stat-num" id="round-num">0</div><div class="stat-label">الجولة</div></div>
+    <div class="stat"><div class="stat-num" id="diff-num">0</div><div class="stat-label">حروف</div></div>
+  </div>
+  <div class="sequence-box" id="seq-box" style="display:none">
+    <div class="sequence-text" id="seq-text"></div>
+    <div class="sequence-timer" id="seq-timer"></div>
+  </div>
+  <div class="reg-banner" id="reg-banner" style="display:none">
+    <div class="reg-title">اكتب في الشات</div>
+    <div class="reg-keyword" id="reg-keyword">ذاكرة</div>
+    <div class="reg-count" id="reg-count">0 لاعب</div>
+  </div>
+  <div class="feed" id="feed"></div>
+  <div class="winner-box" id="winner-box">
+    <div class="winner-icon">🏆</div>
+    <div class="winner-name" id="winner-name"></div>
+    <div class="winner-score" id="winner-score"></div>
+  </div>
+  <div class="confetti-layer" id="confetti-layer"></div>
+</div>
+<script>
+var params = new URLSearchParams(location.search);
+var username = params.get('username') || '';
+var socket = io();
+if (username) socket.emit('join', { username });
+
+var COLORS = ['#a855f7','#fbbf24','#1dba72','#ff0050','#25f4ee','#ec4899'];
+var seqTimerInt = null;
+
+socket.on('memory:register', function(d) {
+  document.getElementById('reg-banner').style.display = 'block';
+  document.getElementById('reg-keyword').textContent = d.keyword;
+  document.getElementById('reg-count').textContent = '0 لاعب';
+  document.getElementById('seq-box').style.display = 'none';
+  document.getElementById('winner-box').classList.remove('show');
+  document.getElementById('winner-box').style.display = 'none';
+  document.getElementById('phase-label').textContent = '📝 مرحلة التسجيل';
+  document.getElementById('round-badge').style.display = 'none';
+  document.getElementById('stats-row').style.display = 'none';
+  document.getElementById('feed').innerHTML = '';
+  document.getElementById('box').classList.add('show');
+});
+
+socket.on('memory:player-joined', function(d) {
+  document.getElementById('reg-count').textContent = d.totalPlayers + ' لاعب';
+  addFeed('join', '🟣 ' + d.player + ' انضم');
+});
+
+socket.on('memory:show', function(d) {
+  document.getElementById('reg-banner').style.display = 'none';
+  document.getElementById('seq-box').style.display = 'block';
+  document.getElementById('seq-text').textContent = d.sequence;
+  document.getElementById('seq-text').className = 'sequence-text';
+  document.getElementById('phase-label').textContent = '👀 احفظ التسلسل!';
+  document.getElementById('round-badge').style.display = 'block';
+  document.getElementById('round-text').textContent = 'الجولة ' + d.round;
+  document.getElementById('stats-row').style.display = 'flex';
+  document.getElementById('alive-count').textContent = d.alivePlayers;
+  document.getElementById('round-num').textContent = d.round;
+  document.getElementById('diff-num').textContent = d.difficulty;
+  document.getElementById('box').classList.add('show');
+  // Countdown
+  var remaining = d.showTime;
+  document.getElementById('seq-timer').textContent = '⏱ ' + remaining.toFixed(1) + 's';
+  if (seqTimerInt) clearInterval(seqTimerInt);
+  seqTimerInt = setInterval(function() {
+    remaining -= 0.1;
+    if (remaining <= 0) { clearInterval(seqTimerInt); seqTimerInt = null; }
+    else document.getElementById('seq-timer').textContent = '⏱ ' + Math.max(0, remaining).toFixed(1) + 's';
+  }, 100);
+});
+
+socket.on('memory:answer', function(d) {
+  document.getElementById('seq-text').textContent = '❓'.repeat(d.length);
+  document.getElementById('seq-text').className = 'sequence-text sequence-hidden';
+  document.getElementById('phase-label').textContent = '⌨️ اكتب التسلسل في الشات!';
+  var remaining = d.answerTime;
+  document.getElementById('seq-timer').textContent = '⏱ ' + remaining + 's';
+  if (seqTimerInt) clearInterval(seqTimerInt);
+  seqTimerInt = setInterval(function() {
+    remaining -= 0.1;
+    document.getElementById('seq-timer').textContent = '⏱ ' + Math.max(0, remaining).toFixed(1) + 's';
+    if (remaining <= 0) { clearInterval(seqTimerInt); seqTimerInt = null; }
+  }, 100);
+});
+
+socket.on('memory:correct', function(d) {
+  addFeed('correct', '✅ ' + d.player + ' — صح! (#' + d.score + ')');
+});
+
+socket.on('memory:wrong', function(d) {
+  addFeed('wrong', '❌ ' + d.player + ' — غلط!');
+});
+
+socket.on('memory:results', function(d) {
+  if (seqTimerInt) { clearInterval(seqTimerInt); seqTimerInt = null; }
+  document.getElementById('seq-text').textContent = d.sequence;
+  document.getElementById('seq-text').className = 'sequence-text';
+  document.getElementById('seq-timer').textContent = '';
+  document.getElementById('phase-label').textContent = '📊 النتائج — باقي ' + d.totalAlive + ' لاعب';
+  document.getElementById('alive-count').textContent = d.totalAlive;
+  if (d.winner) {
+    document.getElementById('winner-name').textContent = d.winner.name;
+    document.getElementById('winner-score').textContent = d.winner.score + ' جولة صحيحة';
+    document.getElementById('winner-box').style.display = 'block';
+    document.getElementById('winner-box').classList.add('show');
+    document.getElementById('phase-label').textContent = '🏆 الفائز!';
+    fireConfetti();
+  }
+});
+
+socket.on('memory:stopped', function() {
+  document.getElementById('box').classList.remove('show');
+  if (seqTimerInt) { clearInterval(seqTimerInt); seqTimerInt = null; }
+});
+
+function addFeed(type, text) {
+  var el = document.getElementById('feed');
+  var div = document.createElement('div');
+  div.className = 'feed-item ' + type;
+  div.textContent = text;
+  el.prepend(div);
+  while (el.children.length > 8) el.removeChild(el.lastChild);
+}
+
+function fireConfetti() {
+  var layer = document.getElementById('confetti-layer');
+  var box = document.getElementById('box');
+  var cx = box.offsetWidth/2, cy = box.offsetHeight/2;
+  for (var i = 0; i < 35; i++) {
+    var p = document.createElement('div');
+    p.style.cssText = 'position:absolute;width:8px;height:12px;left:'+cx+'px;top:'+cy+'px;background:'+COLORS[i%COLORS.length]+';border-radius:2px;';
+    layer.appendChild(p);
+    var angle = Math.random()*Math.PI*2, dist = 100+Math.random()*200;
+    p.animate([
+      {transform:'translate(0,0) rotate(0deg)',opacity:1},
+      {transform:'translate('+Math.cos(angle)*dist+'px,'+Math.sin(angle)*dist+'px) rotate('+(720+Math.random()*720)+'deg)',opacity:0}
+    ],{duration:1500+Math.random()*500,easing:'cubic-bezier(0.4,0,0.6,1)'});
+    setTimeout(function(el){el.remove()}.bind(null,p),2100);
+  }
+}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OBS Link Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #111118; --surface2: #1a1a24;
+    --border: rgba(255,255,255,0.08); --accent: #ff0050;
+    --accent2: #25f4ee; --text: #f0f0f5; --muted: #777;
+    --radius: 12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Tajawal',sans-serif; min-height:100vh; padding:30px 20px; }
+
+  .container { max-width: 760px; margin: 0 auto; }
+
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  h1 span { color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 13px; font-weight: 700; letter-spacing: .8px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 16px;
+  }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  label { font-size: 13px; color: #bbb; }
+  input[type=text], input[type=number], select {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: inherit; font-size: 14px;
+    padding: 8px 12px; border-radius: 8px; outline: none; width: 100%;
+    transition: border-color .2s;
+  }
+  input:focus, select:focus { border-color: var(--accent2); }
+
+  input[type=color] {
+    width: 100%; height: 38px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface2);
+    cursor: pointer; padding: 3px 6px;
+  }
+
+  /* Toggles */
+  .toggles { display: flex; flex-wrap: wrap; gap: 10px; }
+  .toggle-item {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 7px 12px; border-radius: 8px; cursor: pointer;
+    user-select: none; transition: border-color .2s;
+    font-size: 13px;
+  }
+  .toggle-item:has(input:checked) { border-color: var(--accent2); color: var(--accent2); }
+  .toggle-item input { display: none; }
+
+  /* URL output */
+  .url-box {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+    font-family: monospace; font-size: 12px;
+    color: var(--accent2); word-break: break-all;
+    line-height: 1.6; min-height: 60px;
+  }
+  .copy-btn {
+    background: var(--accent); color: #fff; border: none;
+    font-family: inherit; font-size: 14px; font-weight: 700;
+    padding: 10px 20px; border-radius: 10px; cursor: pointer;
+    margin-top: 12px; width: 100%; transition: opacity .15s;
+  }
+  .copy-btn:hover { opacity: .85; }
+  .copy-btn.copied { background: #1dba72; }
+
+  /* Preview */
+  .preview-frame {
+    width: 100%; height: 200px; border-radius: 10px;
+    border: 1px solid var(--border); background: #000;
+    overflow: hidden;
+  }
+  .preview-frame iframe { width: 100%; height: 100%; border: none; }
+
+  .preview-note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  @media (max-width: 500px) {
+    .grid2, .grid3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎯 OBS Link <span>Generator</span></h1>
+  <p class="subtitle">عدّل الإعدادات وانسخ الرابط لـ OBS</p>
+
+  <!-- Connection -->
+  <div class="card">
+    <div class="card-title">الاتصال</div>
+    <div class="field">
+      <label>يوزرنيم TikTok</label>
+      <input type="text" id="username" placeholder="dowp009" oninput="update()">
+    </div>
+  </div>
+
+  <!-- Hide Comments -->
+  <div class="card">
+    <div class="card-title">إخفاء التعليقات</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+      <span style="font-size:14px; color:#bbb;">إخفاء جميع التعليقات من الـ overlay (مفيد لو تبي تعرض الهدايا والأحداث فقط)</span>
+      <label class="toggle-item" style="flex-shrink:0; font-size:14px; padding:10px 18px;">
+        <input type="checkbox" id="showChats2" checked onchange="document.getElementById('showChats').checked=this.checked; update()">
+        💬 إظهار التعليقات
+      </label>
+    </div>
+  </div>
+
+  <!-- Display toggles -->
+  <div class="card">
+    <div class="card-title">ما يظهر</div>
+    <div class="toggles">
+      <label class="toggle-item"><input type="checkbox" id="showChats" checked onchange="update()"> 💬 Chat</label>
+      <label class="toggle-item"><input type="checkbox" id="showGifts" checked onchange="update()"> 🎁 الهدايا</label>
+      <label class="toggle-item"><input type="checkbox" id="showFollows" checked onchange="update()"> ➕ المتابعات</label>
+      <label class="toggle-item"><input type="checkbox" id="showJoins" checked onchange="update()"> 👋 الانضمام</label>
+      <label class="toggle-item"><input type="checkbox" id="showShares" checked onchange="update()"> 🔗 المشاركات</label>
+      <label class="toggle-item"><input type="checkbox" id="showStats" checked onchange="update()"> 📊 Stats Bar</label>
+      <label class="toggle-item"><input type="checkbox" id="showViewers" checked onchange="update()"> 👁️ المشاهدين</label>
+      <label class="toggle-item"><input type="checkbox" id="showLikes" checked onchange="update()"> ❤️ الإعجابات</label>
+      <label class="toggle-item"><input type="checkbox" id="showDiamonds" checked onchange="update()"> 💎 الدايموند</label>
+      <label class="toggle-item"><input type="checkbox" id="showShareCount" checked onchange="update()"> 🔗 عداد المشاركات</label>
+      <label class="toggle-item"><input type="checkbox" id="showFollowers" checked onchange="update()"> ➕ عداد المتابعين</label>
+    </div>
+  </div>
+
+  <!-- Sound mode -->
+  <div class="card">
+    <div class="card-title">وضع الأصوات</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="setSoundMode('all')" id="mode-all"
+        style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--accent2);background:rgba(37,244,238,.1);color:var(--accent2);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+        🔊 كل الأصوات
+      </button>
+      <button onclick="setSoundMode('follow')" id="mode-follow"
+        style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+        ➕ متابعة فقط
+      </button>
+      <button onclick="setSoundMode('none')" id="mode-none"
+        style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+        🔇 بدون أصوات
+      </button>
+    </div>
+  </div>
+
+  <!-- Style -->
+  <div class="card">
+    <div class="card-title">المظهر</div>
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="field">
+        <label>لون الخلفية</label>
+        <input type="color" id="bgColorPicker" value="#000000" oninput="update()">
+      </div>
+      <div class="field">
+        <label>شفافية الخلفية</label>
+        <select id="bgAlpha" onchange="update()">
+          <option value="0">شفاف تماماً</option>
+          <option value="0.3">30%</option>
+          <option value="0.5">50%</option>
+          <option value="0.7">70%</option>
+          <option value="1" selected>100% (صلب)</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid3">
+      <div class="field">
+        <label>لون النص</label>
+        <input type="color" id="fontColor" value="#ffffff" oninput="update()">
+      </div>
+      <div class="field">
+        <label>لون اسم المستخدم</label>
+        <input type="color" id="usernameColor" value="#25f4ee" oninput="update()">
+      </div>
+      <div class="field">
+        <label>خلفية الفقاعة</label>
+        <input type="color" id="bubbleBg" value="#000000" oninput="update()">
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="field">
+        <label>حجم الخط</label>
+        <input type="text" id="fontSize" value="1em" placeholder="1em أو 16px" oninput="update()">
+      </div>
+      <div class="field">
+        <label>اتجاه النص</label>
+        <select id="dir" onchange="update()">
+          <option value="rtl" selected>عربي (RTL)</option>
+          <option value="ltr">إنجليزي (LTR)</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="field">
+        <label>نوع الخط</label>
+        <select id="fontFamily" onchange="update()">
+          <optgroup label="خطوط عربية">
+            <option value="Tajawal" selected>Tajawal</option>
+            <option value="Cairo">Cairo</option>
+            <option value="Almarai">Almarai</option>
+            <option value="Noto Kufi Arabic">Noto Kufi Arabic</option>
+            <option value="Readex Pro">Readex Pro</option>
+            <option value="Changa">Changa</option>
+            <option value="Lateef">Lateef</option>
+            <option value="Arial Arabic">Arial Arabic (Noto Naskh)</option>
+            <option value="Arial Arabic Bold">Arial Arabic Bold</option>
+          </optgroup>
+          <optgroup label="خطوط إنجليزية">
+            <option value="Arial">Arial</option>
+            <option value="Open Sans">Open Sans</option>
+            <option value="Roboto">Roboto</option>
+            <option value="Poppins">Poppins</option>
+            <option value="Montserrat">Montserrat</option>
+            <option value="Inter">Inter</option>
+            <option value="Oswald">Oswald</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="field">
+        <label>أقصى عدد رسائل</label>
+        <input type="number" id="maxMsgs" value="30" min="5" max="100" oninput="update()">
+      </div>
+      <div class="field">
+        <label>الجهة</label>
+        <select id="side" onchange="update()">
+          <option value="right">يمين</option>
+          <option value="left">يسار</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>شريط الإحصائيات</label>
+        <select id="showStats" onchange="update()">
+          <option value="1">ظاهر</option>
+          <option value="0">مخفي</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ألوان الأحداث -->
+    <div style="margin-top:14px">
+      <label style="font-size:13px;color:#bbb;display:block;margin-bottom:10px">ألوان الأحداث</label>
+      <div class="grid3">
+        <div class="field">
+          <label>➕ المتابعة</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="color" id="followColor" value="#1dba72" oninput="update()" style="flex:1;height:34px">
+            <select id="followColorPreset" onchange="applyPreset('followColor',this.value);update()" style="flex:1;font-size:11px;padding:4px 6px">
+              <option value="">اختر</option>
+              <option value="#1dba72">أخضر</option>
+              <option value="#25f4ee">سماوي</option>
+              <option value="#ffffff">أبيض</option>
+              <option value="#ffd700">ذهبي</option>
+              <option value="#ff0050">أحمر</option>
+              <option value="#a57afa">بنفسجي</option>
+              <option value="#f59e0b">برتقالي</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>🔗 المشاركة</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="color" id="shareColor" value="#a57afa" oninput="update()" style="flex:1;height:34px">
+            <select id="shareColorPreset" onchange="applyPreset('shareColor',this.value);update()" style="flex:1;font-size:11px;padding:4px 6px">
+              <option value="">اختر</option>
+              <option value="#a57afa">بنفسجي</option>
+              <option value="#25f4ee">سماوي</option>
+              <option value="#ffffff">أبيض</option>
+              <option value="#ffd700">ذهبي</option>
+              <option value="#ff0050">أحمر</option>
+              <option value="#1dba72">أخضر</option>
+              <option value="#f59e0b">برتقالي</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>👋 الانضمام</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="color" id="joinColor" value="#25f4ee" oninput="update()" style="flex:1;height:34px">
+            <select id="joinColorPreset" onchange="applyPreset('joinColor',this.value);update()" style="flex:1;font-size:11px;padding:4px 6px">
+              <option value="">اختر</option>
+              <option value="#25f4ee">سماوي</option>
+              <option value="#ffffff">أبيض</option>
+              <option value="#ffd700">ذهبي</option>
+              <option value="#1dba72">أخضر</option>
+              <option value="#a57afa">بنفسجي</option>
+              <option value="#f59e0b">برتقالي</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Output -->
+  <div class="card">
+    <div class="card-title">الرابط الجاهز</div>
+    <div class="url-box" id="url-output">أدخل يوزرنيم أولاً...</div>
+    <button class="copy-btn" id="copy-btn" onclick="copyUrl()">📋 انسخ الرابط</button>
+  </div>
+
+</div>
+
+<script>
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return alpha == 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${alpha})`;
+}
+
+function applyPreset(id, val) {
+  if (val) document.getElementById(id).value = val;
+}
+
+let soundMode = 'all';
+function setSoundMode(mode) {
+  soundMode = mode;
+  const styles = {
+    all:    { border: 'var(--accent2)', bg: 'rgba(37,244,238,.1)', color: 'var(--accent2)' },
+    follow: { border: '#1dba72',        bg: 'rgba(29,186,114,.1)', color: '#1dba72' },
+    none:   { border: 'var(--muted)',   bg: 'var(--surface2)',     color: 'var(--muted)' },
+  };
+  ['all','follow','none'].forEach(m => {
+    const btn = document.getElementById(`mode-${m}`);
+    const s = m === mode ? styles[m] : { border: 'var(--border)', bg: 'var(--surface2)', color: 'var(--muted)' };
+    btn.style.borderColor = s.border;
+    btn.style.background  = s.bg;
+    btn.style.color       = s.color;
+  });
+  update();
+}
+
+function update() {
+  const username = document.getElementById('username').value.trim().replace('@','');
+  if (!username) { document.getElementById('url-output').textContent = 'أدخل يوزرنيم أولاً...'; return; }
+
+  const base = location.origin + '/obs.html';
+  const p = new URLSearchParams();
+
+  p.set('username', username);
+
+  // Colors
+  const bgHex   = document.getElementById('bgColorPicker').value;
+  const bgAlpha  = document.getElementById('bgAlpha').value;
+  p.set('bgColor', hexToRgba(bgHex, parseFloat(bgAlpha)));
+  p.set('fontColor', document.getElementById('fontColor').value);
+  p.set('usernameColor', document.getElementById('usernameColor').value);
+
+  const bbHex = document.getElementById('bubbleBg').value;
+  p.set('bubbleBg', hexToRgba(bbHex, 0.6));
+
+  // Text
+  p.set('fontSize',   document.getElementById('fontSize').value || '1em');
+  p.set('fontFamily', document.getElementById('fontFamily').value || 'Tajawal');
+  p.set('dir',        document.getElementById('dir').value);
+  p.set('max',        document.getElementById('maxMsgs').value || '30');
+  p.set('side',       document.getElementById('side').value);
+
+  // Event colors
+  p.set('followColor', document.getElementById('followColor').value);
+  p.set('shareColor',  document.getElementById('shareColor').value);
+  p.set('joinColor',   document.getElementById('joinColor').value);
+
+  // Sound mode
+  if (soundMode === 'all') {
+    ['Gift','BigGift','Follow','Join','Donation'].forEach(t => { p.set(`sound${t}`, '1'); });
+  } else if (soundMode === 'follow') {
+    ['Gift','BigGift','Join','Donation'].forEach(t => { p.set(`sound${t}`, '0'); });
+    p.set('soundFollow', '1');
+  } else {
+    ['Gift','BigGift','Follow','Join','Donation'].forEach(t => { p.set(`sound${t}`, '0'); });
+  }
+
+  // Toggles
+  const toggles = ['showChats','showGifts','showFollows','showJoins','showShares',
+                   'showViewers','showLikes','showDiamonds','showShareCount','showFollowers'];
+  toggles.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) p.set(id, el.checked ? '1' : '0');
+  });
+  // showStats from dropdown
+  p.set('showStats', document.getElementById('showStats').value || '1');
+
+  const url = base + '?' + p.toString();
+  document.getElementById('url-output').textContent = url;
+}
+
+function copyUrl() {
+  const txt = document.getElementById('url-output').textContent;
+  if (txt.includes('أدخل')) return;
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = '✅ تم النسخ!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '📋 انسخ الرابط'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+update();
+
+// Auto-fill username from URL param
+const urlU = new URLSearchParams(location.search).get('u');
+if (urlU) { document.getElementById('username').value = urlU; update(); }
+</script>
+</body>
+</html>

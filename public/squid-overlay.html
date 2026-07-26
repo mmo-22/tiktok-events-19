@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🦑 لعبة الحبار</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent !important;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center}
+
+.main{position:relative;width:min(96vw,700px);aspect-ratio:16/10;opacity:0;transition:opacity .2s}
+.main.show{opacity:1}
+.scene{position:absolute;inset:0;border-radius:18px;overflow:hidden;border:2px solid rgba(255,95,143,.4);
+  background:linear-gradient(#2a1030 0%,#3d1535 40%,#4a2530 62%,#c9a06a 63%,#b8905c 100%);
+  box-shadow:0 0 30px rgba(0,0,0,.6);transition:box-shadow .3s}
+.scene.red-alert{box-shadow:0 0 30px rgba(239,68,68,.55),inset 0 0 60px rgba(239,68,68,.18)}
+
+/* شمس الغروب */
+.sun{position:absolute;top:10%;right:12%;width:52px;height:52px;border-radius:50%;background:#ff8fa0;box-shadow:0 0 40px rgba(255,143,160,.6);opacity:.8}
+
+/* الدمية عند خط النهاية (يسار) */
+.doll-zone{position:absolute;left:3%;top:22%;bottom:0;width:16%;display:flex;flex-direction:column;align-items:center;z-index:8}
+.doll{font-size:3.4rem;transition:transform .3s;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5));transform:scaleX(-1)}
+.doll.watching{transform:scaleX(1) scale(1.08)}
+.doll-eyes{position:absolute;top:14px;font-size:.8rem;opacity:0;transition:.2s}
+.doll.watching~.doll-eyes{opacity:1;animation:eyeGlow .8s infinite}
+@keyframes eyeGlow{50%{filter:drop-shadow(0 0 6px #ef4444)}}
+.finish-line{position:absolute;left:17%;top:37%;bottom:0;width:8px;background:repeating-conic-gradient(#fff 0 25%,#111 0 50%) 0 0/8px 8px;opacity:.85;z-index:4}
+
+/* الإشارة الضوئية */
+.light-banner{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:15;
+  font-size:1.05rem;font-weight:900;padding:6px 26px;border-radius:30px;border:2px solid;transition:.25s;white-space:nowrap;background:#0c0c16ee}
+.light-banner.g{color:#86efac;border-color:#22c55e;box-shadow:0 0 22px rgba(34,197,94,.5)}
+.light-banner.r{color:#fca5a5;border-color:#ef4444;box-shadow:0 0 22px rgba(239,68,68,.6);animation:redPulse .7s infinite}
+@keyframes redPulse{50%{box-shadow:0 0 34px rgba(239,68,68,.9)}}
+
+.sub-banner{position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:15;font-size:.66rem;font-weight:900;color:rgba(255,255,255,.75);background:#0c0c16bb;border-radius:10px;padding:3px 14px;white-space:nowrap}
+
+/* التسجيل */
+.reg-panel{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);z-index:14;text-align:center;display:none;
+  background:#0c0c16e6;border:2px solid rgba(255,95,143,.5);border-radius:16px;padding:14px 26px;box-shadow:0 0 26px rgba(255,95,143,.25)}
+.reg-panel.show{display:block;animation:popIn .35s cubic-bezier(.2,1.5,.4,1)}
+@keyframes popIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.reg-title{font-size:.8rem;color:#ff8fb1;font-weight:900}
+.reg-kw{font-size:1.5rem;font-weight:900;color:#fff;margin:2px 0;text-shadow:0 0 14px rgba(255,95,143,.6)}
+.reg-count{font-size:.74rem;color:#cbd5e1;font-weight:700}
+
+/* اللاعبين */
+#players-layer{position:absolute;inset:0;z-index:6}
+.runner{position:absolute;display:flex;flex-direction:column;align-items:center;gap:1px;transform:translate(50%,-50%);transition:right .45s cubic-bezier(.3,1.1,.4,1),top .45s}
+.runner .rav{width:var(--rs,36px);height:var(--rs,36px);border-radius:50%;overflow:hidden;border:2.5px solid #ff5f8f;background:#3d1535;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;font-size:calc(var(--rs,36px)*.4);box-shadow:0 3px 8px rgba(0,0,0,.5)}
+.runner .rav img{width:100%;height:100%;object-fit:cover}
+.runner .rnm{font-size:.54rem;font-weight:900;color:#fff;background:#0c0c16cc;border-radius:7px;padding:0 6px;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.runner.hop .rav{animation:hop .3s}
+@keyframes hop{50%{transform:translateY(-6px)}}
+.runner.dead{transition:none;animation:die .9s forwards}
+.runner.dead .rav{border-color:#6b7280;filter:grayscale(1) brightness(.6)}
+.runner.dead::after{content:"💥";position:absolute;top:-14px;font-size:1rem;animation:bang .9s forwards}
+@keyframes die{30%{transform:translate(50%,-50%) rotate(8deg)}100%{transform:translate(50%,-30%) rotate(88deg);opacity:0}}
+@keyframes bang{0%{opacity:0;transform:scale(.4)}25%{opacity:1;transform:scale(1.3)}100%{opacity:0}}
+.runner.champ .rav{border-color:#f5c542;box-shadow:0 0 18px rgba(245,197,66,.7)}
+.runner.enter{animation:rEnter .4s cubic-bezier(.2,1.5,.4,1)}
+@keyframes rEnter{0%{opacity:0;transform:translate(50%,-50%) scale(.2)}100%{opacity:1;transform:translate(50%,-50%) scale(1)}}
+
+/* الفائزين */
+.end-panel{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(20,6,20,.88);backdrop-filter:blur(10px)}
+.end-panel.show{display:flex;animation:fadeIn .5s}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.end-title{font-size:1.5rem;font-weight:900;color:#ff8fb1;text-shadow:0 0 18px rgba(255,95,143,.7);margin-bottom:6px}
+.podium{display:flex;gap:16px;align-items:flex-end}
+.pod{display:flex;flex-direction:column;align-items:center;gap:4px}
+.pod .medal{font-size:1.4rem}
+.pod .wav{border-radius:50%;overflow:hidden;border:3px solid #f5c542;background:#3d1535;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;box-shadow:0 0 20px rgba(245,197,66,.5)}
+.pod .wav img{width:100%;height:100%;object-fit:cover}
+.pod .wnm{font-size:.74rem;font-weight:900;color:#fde68a;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.no-win{font-size:.95rem;font-weight:900;color:#fca5a5}
+.confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:21}
+</style>
+</head>
+<body>
+<div class="main" id="box">
+  <div class="scene" id="scene">
+    <div class="sun"></div>
+    <div class="light-banner r" id="light-banner">🔴 استعدوا...</div>
+    <div class="sub-banner" id="sub-banner">🦑 لعبة الحبار</div>
+    <div class="doll-zone"><div class="doll" id="doll">🎎</div></div>
+    <div class="finish-line"></div>
+    <div id="players-layer"></div>
+    <div class="reg-panel" id="reg-panel">
+      <div class="reg-title">اكتب في الشات عشان تدخل اللعبة</div>
+      <div class="reg-kw" id="reg-kw">حبار</div>
+      <div class="reg-count" id="reg-count">0 / 30</div>
+    </div>
+    <div class="end-panel" id="end-panel">
+      <div class="end-title">🏁 انتهت اللعبة!</div>
+      <div class="podium" id="podium"></div>
+      <div class="no-win" id="no-win" style="display:none">💀 ما وصل أحد... الدمية فازت</div>
+    </div>
+    <div class="confetti" id="confetti"></div>
+  </div>
+</div>
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();
+function joinRoom(){if(username)socket.emit('join',{username});}
+socket.on('connect',joinRoom);
+
+var finishSteps=20;
+var runners={}; // name -> {el, avatar, steps, lane}
+var laneCount=6, nextLane=0;
+var CC=['#ff5f8f','#f5c542','#22c55e','#3b82f6','#a855f7','#ef4444'];
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function runnerSize(){var n=Object.keys(runners).length;return n<=8?40:n<=15?34:n<=25?28:24;}
+function applySizes(){var sz=runnerSize();Object.keys(runners).forEach(function(n){runners[n].el.style.setProperty('--rs',sz+'px');});}
+
+// المسار: البداية يمين (right:6%) والنهاية عند الخط (right:78%)
+function posFor(steps,lane){
+  var pct=6+Math.min(1,steps/finishSteps)*72;
+  var top=40+ (lane%laneCount)*(52/laneCount);
+  return {right:pct+'%',top:top+'%'};
+}
+
+function addRunner(name,avatar){
+  if(runners[name])return;
+  var d=document.createElement('div');
+  d.className='runner enter';
+  var avInner=avatar?'<img src="'+esc(avatar)+'" onerror="this.parentElement.textContent=\''+esc((name||'?')[0])+'\'">':esc((name||'?')[0]);
+  d.innerHTML='<div class="rav">'+avInner+'</div><div class="rnm">'+esc(name)+'</div>';
+  var lane=nextLane++;
+  var p=posFor(0,lane);
+  d.style.right=p.right;d.style.top=p.top;
+  document.getElementById('players-layer').appendChild(d);
+  runners[name]={el:d,avatar:avatar||null,steps:0,lane:lane};
+  applySizes();
+  setTimeout(function(){d.classList.remove('enter');},420);
+}
+
+function setLightUI(color){
+  var b=document.getElementById('light-banner'),doll=document.getElementById('doll'),scene=document.getElementById('scene'),sub=document.getElementById('sub-banner');
+  if(color==='green'){
+    b.className='light-banner g';b.textContent='🟢 الضوء أخضر — انطلقوا!';
+    doll.classList.remove('watching');scene.classList.remove('red-alert');
+    sub.textContent='اكتبوا بالشات — كل رسالة خطوة!';
+  }else{
+    b.className='light-banner r';b.textContent='🔴 الضوء أحمر — تجمدوا!';
+    doll.classList.add('watching');scene.classList.add('red-alert');
+    sub.textContent='لا أحد يكتب... الدمية تراقب 👀';
+  }
+}
+
+socket.on('squid:register',function(d){
+  document.getElementById('box').classList.add('show');
+  document.getElementById('players-layer').innerHTML='';
+  runners={};nextLane=0;
+  finishSteps=d.finishSteps||20;
+  document.getElementById('end-panel').classList.remove('show');
+  document.getElementById('reg-panel').classList.add('show');
+  document.getElementById('reg-kw').textContent=d.keyword;
+  document.getElementById('reg-count').textContent='0 / '+d.maxPlayers;
+  document.getElementById('light-banner').className='light-banner r';
+  document.getElementById('light-banner').textContent='📝 التسجيل مفتوح';
+  document.getElementById('sub-banner').textContent='🦑 لعبة الحبار';
+});
+
+socket.on('squid:joined',function(d){
+  document.getElementById('box').classList.add('show');
+  document.getElementById('reg-count').textContent=d.count+' / '+d.max;
+  addRunner(d.player,d.avatar);
+});
+
+socket.on('squid:start',function(d){
+  document.getElementById('reg-panel').classList.remove('show');
+  finishSteps=d.finishSteps||20;
+  (d.players||[]).forEach(function(p){if(!runners[p.name])addRunner(p.name,p.avatar);});
+});
+
+socket.on('squid:light',function(d){setLightUI(d.light);});
+
+socket.on('squid:step',function(d){
+  var r=runners[d.player];
+  if(!r){addRunner(d.player,d.avatar);r=runners[d.player];}
+  r.steps=d.steps;finishSteps=d.finish||finishSteps;
+  var p=posFor(r.steps,r.lane);
+  r.el.style.right=p.right;r.el.style.top=p.top;
+  r.el.classList.remove('hop');void r.el.offsetWidth;r.el.classList.add('hop');
+});
+
+socket.on('squid:eliminated',function(d){
+  var r=runners[d.player];
+  if(!r)return;
+  r.el.classList.add('dead');
+  setTimeout(function(){if(r.el.parentNode)r.el.remove();},950);
+  delete runners[d.player];
+});
+
+socket.on('squid:finished',function(d){
+  var r=runners[d.player];
+  if(r){
+    r.el.classList.add('champ');
+    r.el.style.right='84%';
+  }
+});
+
+socket.on('squid:end',function(d){
+  var pod=document.getElementById('podium');
+  var wins=d.winners||[];
+  document.getElementById('no-win').style.display=wins.length?'none':'block';
+  var medals=['🥇','🥈','🥉','🏅','🏅','🏅','🏅','🏅','🏅','🏅'];
+  var sizes=[74,60,52];
+  pod.innerHTML=wins.slice(0,10).map(function(w,i){
+    var sz=sizes[i]||46;
+    var avInner=w.avatar?'<img src="'+esc(w.avatar)+'" onerror="this.parentElement.textContent=\''+esc((w.name||'?')[0])+'\'">':esc((w.name||'?')[0]);
+    return '<div class="pod"><div class="medal">'+medals[i]+'</div><div class="wav" style="width:'+sz+'px;height:'+sz+'px;font-size:'+(sz*.38)+'px">'+avInner+'</div><div class="wnm">'+esc(w.name)+'</div></div>';
+  }).join('');
+  document.getElementById('end-panel').classList.add('show');
+  if(wins.length)fireConfetti();
+});
+
+socket.on('squid:stopped',function(){document.getElementById('box').classList.remove('show');});
+
+// استعادة الحالة عند الفتح
+if(username){
+  fetch('/api/squid/'+username).then(function(r){return r.json();}).then(function(d){
+    if(!d.active)return;
+    document.getElementById('box').classList.add('show');
+    finishSteps=d.finishSteps||20;
+    (d.players||[]).forEach(function(p){
+      if(p.alive||p.finished){addRunner(p.name,p.avatar);
+        var r=runners[p.name];r.steps=p.steps;
+        var pos=posFor(p.steps,r.lane);r.el.style.right=pos.right;r.el.style.top=pos.top;
+        if(p.finished){r.el.classList.add('champ');r.el.style.right='84%';}
+      }
+    });
+    if(d.phase==='register'){
+      document.getElementById('reg-panel').classList.add('show');
+      document.getElementById('reg-kw').textContent=d.keyword;
+      document.getElementById('reg-count').textContent=(d.players||[]).length+' / '+d.maxPlayers;
+    } else if(d.phase==='playing'){
+      setLightUI(d.light);
+    }
+  });
+}
+joinRoom();
+
+function fireConfetti(){var layer=document.getElementById('confetti'),box=document.getElementById('box'),cx=box.offsetWidth/2,cy=box.offsetHeight/2;for(var i=0;i<40;i++){var p=document.createElement('div');p.style.cssText='position:absolute;width:7px;height:11px;left:'+cx+'px;top:'+cy+'px;background:'+CC[i%CC.length]+';border-radius:2px;';layer.appendChild(p);var a=Math.random()*Math.PI*2,dd=90+Math.random()*230;p.animate([{transform:'translate(0,0) rotate(0deg)',opacity:1},{transform:'translate('+Math.cos(a)*dd+'px,'+Math.sin(a)*dd+'px) rotate('+(600+Math.random()*600)+'deg)',opacity:0}],{duration:1500+Math.random()*500,easing:'cubic-bezier(0.4,0,0.6,1)'});setTimeout(function(el){el.remove()}.bind(null,p),2100);}}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

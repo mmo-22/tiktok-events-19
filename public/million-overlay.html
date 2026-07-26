@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Millionaire Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent;width:100vw;height:100vh;font-family:'Tajawal',sans-serif;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.main{position:relative;background:rgba(0,0,15,.95);border:2px solid rgba(255,215,0,.3);border-radius:22px;padding:24px 28px;width:620px;opacity:0;transition:opacity .15s;overflow:hidden}
+.main.show{opacity:1}
+.main::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#ffd700,#f59e0b,#ffd700)}
+
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.title{font-size:16px;color:rgba(255,255,255,.4)}
+.title span{color:#ffd700;font-weight:900}
+.points-badge{padding:6px 16px;background:linear-gradient(135deg,#ffd700,#f59e0b);color:#000;border-radius:20px;font-size:14px;font-weight:900}
+.q-counter{font-size:12px;color:rgba(255,255,255,.3)}
+
+.question-box{background:linear-gradient(135deg,rgba(255,215,0,.08),rgba(255,215,0,.02));border:1.5px solid rgba(255,215,0,.2);border-radius:16px;padding:20px;text-align:center;margin-bottom:16px}
+.question-text{font-size:20px;font-weight:900;color:#fff;line-height:1.5}
+
+.options-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.option{padding:14px 16px;border-radius:12px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px;transition:all .3s;cursor:default}
+.option .num{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:rgba(255,255,255,.5);flex-shrink:0}
+.option .text{font-size:15px;font-weight:700;color:rgba(255,255,255,.7);flex:1}
+.option.correct{background:rgba(29,186,114,.15);border-color:#1dba72;animation:optPop .4s ease}
+.option.correct .num{background:#1dba72;color:#fff}
+.option.correct .text{color:#1dba72}
+.option.wrong{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3)}
+.option.wrong .num{background:rgba(239,68,68,.3);color:#fff}
+.option.wrong .text{color:rgba(239,68,68,.7)}
+.option.removed{opacity:.15;pointer-events:none}
+@keyframes optPop{0%{transform:scale(.95)}50%{transform:scale(1.03)}100%{transform:scale(1)}}
+
+.timer-bar{height:6px;background:rgba(255,255,255,.06);border-radius:3px;margin-bottom:14px;overflow:hidden}
+.timer-fill{height:100%;background:linear-gradient(90deg,#ffd700,#f59e0b);border-radius:3px;transition:width .2s linear}
+.timer-fill.warn{background:linear-gradient(90deg,#f59e0b,#ef4444)}
+
+.stats-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:rgba(255,255,255,.3);margin-bottom:10px}
+.answer-count{color:#ffd700;font-weight:700}
+
+.helps-row{display:flex;justify-content:center;gap:8px;margin-bottom:14px}
+.help-btn{padding:6px 14px;background:rgba(255,215,0,.08);border:1px solid rgba(255,215,0,.2);border-radius:8px;font-size:12px;color:#ffd700;font-weight:700}
+.help-btn.used{opacity:.2;text-decoration:line-through}
+
+.results-box{display:none;text-align:center;padding:12px}
+.results-box.show{display:block;animation:optPop .4s ease}
+.results-stats{display:flex;justify-content:center;gap:24px;margin-bottom:10px}
+.r-stat{text-align:center}
+.r-stat-num{font-size:22px;font-weight:900}
+.r-stat-num.green{color:#1dba72}
+.r-stat-num.red{color:#ef4444}
+.r-stat-label{font-size:10px;color:rgba(255,255,255,.3)}
+
+.leaderboard{margin-top:10px}
+.lb-title{font-size:12px;color:#ffd700;font-weight:700;margin-bottom:6px;text-align:center}
+.lb-item{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:8px;background:rgba(255,255,255,.02);margin-bottom:3px;font-size:12px}
+.lb-rank{font-size:14px;width:20px;text-align:center}
+.lb-name{flex:1;font-weight:700;color:#fff}
+.lb-score{color:#ffd700;font-weight:700}
+
+.audience-chart{display:flex;align-items:flex-end;justify-content:center;gap:16px;height:80px;margin:10px 0}
+.audience-bar-wrap{text-align:center;flex:1}
+.audience-bar{width:100%;background:rgba(255,215,0,.15);border-radius:4px 4px 0 0;transition:height .5s ease;min-height:4px}
+.audience-label{font-size:11px;color:rgba(255,255,255,.4);margin-top:4px}
+.audience-pct{font-size:13px;font-weight:700;color:#ffd700;margin-bottom:4px}
+
+.confetti-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+</style>
+</head>
+<body>
+<div class="main" id="box">
+  <div class="header">
+    <div class="title">💰 <span>من سيربح المليون</span></div>
+    <div class="points-badge" id="points-badge">100 نقطة</div>
+  </div>
+  <div class="q-counter" id="q-counter" style="text-align:center;margin-bottom:10px"></div>
+  <div class="question-box" id="q-box" style="display:none">
+    <div class="question-text" id="q-text"></div>
+  </div>
+  <div class="options-grid" id="options-grid"></div>
+  <div class="timer-bar" id="timer-bar" style="display:none"><div class="timer-fill" id="timer-fill" style="width:100%"></div></div>
+  <div class="stats-row" id="stats-row" style="display:none">
+    <span>اكتب 1 أو 2 أو 3 أو 4</span>
+    <span class="answer-count" id="answer-count">0 جاوب</span>
+  </div>
+  <div class="helps-row" id="helps-row" style="display:none">
+    <span class="help-btn" id="help-remove2">✂️ حذف إجابتين</span>
+    <span class="help-btn" id="help-audience">👥 تصويت الجمهور</span>
+    <span class="help-btn" id="help-change">🔄 تغيير السؤال</span>
+  </div>
+  <div class="audience-chart" id="audience-chart" style="display:none"></div>
+  <div class="results-box" id="results-box"></div>
+  <div class="leaderboard" id="leaderboard" style="display:none"></div>
+  <div class="confetti-layer" id="confetti-layer"></div>
+</div>
+<script>
+var params = new URLSearchParams(location.search);
+var username = params.get('username') || '';
+var socket = io();
+if (username) socket.emit('join', { username });
+var timerInt = null;
+var RANKS = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+socket.on('million:question', function(d) {
+  document.getElementById('box').classList.add('show');
+  document.getElementById('q-box').style.display = 'block';
+  document.getElementById('q-text').textContent = d.question;
+  document.getElementById('points-badge').textContent = (d.points||100).toLocaleString() + ' نقطة';
+  document.getElementById('q-counter').textContent = 'السؤال ' + (d.questionIndex + 1);
+  document.getElementById('answer-count').textContent = '0 جاوب';
+  document.getElementById('stats-row').style.display = 'flex';
+  document.getElementById('timer-bar').style.display = 'block';
+  document.getElementById('helps-row').style.display = 'flex';
+  document.getElementById('results-box').classList.remove('show');
+  document.getElementById('results-box').style.display = 'none';
+  document.getElementById('audience-chart').style.display = 'none';
+
+  // Render options
+  var grid = document.getElementById('options-grid');
+  grid.innerHTML = d.options.map(function(o, i) {
+    return '<div class="option" id="opt-' + (i+1) + '"><span class="num">' + (i+1) + '</span><span class="text">' + esc(o) + '</span></div>';
+  }).join('');
+
+  // Timer
+  var total = d.answerTime * 1000;
+  var start = Date.now();
+  var fill = document.getElementById('timer-fill');
+  fill.style.width = '100%';
+  fill.classList.remove('warn');
+  if (timerInt) clearInterval(timerInt);
+  timerInt = setInterval(function() {
+    var elapsed = Date.now() - start;
+    var pct = Math.max(0, 100 - (elapsed / total * 100));
+    fill.style.width = pct + '%';
+    if (pct < 30) fill.classList.add('warn');
+    if (pct <= 0) clearInterval(timerInt);
+  }, 50);
+});
+
+socket.on('million:answered', function(d) {
+  document.getElementById('answer-count').textContent = d.count + ' جاوب';
+});
+
+socket.on('million:reveal', function(d) {
+  if (timerInt) { clearInterval(timerInt); timerInt = null; }
+  document.getElementById('timer-bar').style.display = 'none';
+  document.getElementById('stats-row').style.display = 'none';
+
+  // Highlight correct/wrong
+  for (var i = 1; i <= 4; i++) {
+    var el = document.getElementById('opt-' + i);
+    if (!el) continue;
+    if (i === d.correct) el.classList.add('correct');
+    else if (d.answerDist[i-1] > 0) el.classList.add('wrong');
+  }
+
+  // Results
+  var rb = document.getElementById('results-box');
+  rb.innerHTML = '<div class="results-stats"><div class="r-stat"><div class="r-stat-num green">' + d.correctCount + '</div><div class="r-stat-label">صح ✅</div></div><div class="r-stat"><div class="r-stat-num red">' + d.wrongCount + '</div><div class="r-stat-label">غلط ❌</div></div><div class="r-stat"><div class="r-stat-num" style="color:#ffd700">' + d.totalAnswers + '</div><div class="r-stat-label">إجمالي</div></div></div>';
+  rb.style.display = 'block';
+  rb.classList.add('show');
+
+  // Leaderboard
+  if (d.topPlayers && d.topPlayers.length) {
+    var lb = document.getElementById('leaderboard');
+    lb.style.display = 'block';
+    lb.innerHTML = '<div class="lb-title">🏆 المتصدرين</div>' + d.topPlayers.map(function(p, i) {
+      return '<div class="lb-item"><span class="lb-rank">' + RANKS[i] + '</span><span class="lb-name">' + esc(p.name) + '</span><span class="lb-score">' + p.totalScore.toLocaleString() + '</span></div>';
+    }).join('');
+  }
+});
+
+socket.on('million:help', function(d) {
+  if (d.type === 'remove2') {
+    document.getElementById('help-remove2').classList.add('used');
+    d.removed.forEach(function(r) {
+      var el = document.getElementById('opt-' + r);
+      if (el) el.classList.add('removed');
+    });
+  } else if (d.type === 'audience') {
+    document.getElementById('help-audience').classList.add('used');
+    var total = d.dist.reduce(function(a,b){return a+b},0) || 1;
+    var chart = document.getElementById('audience-chart');
+    chart.style.display = 'flex';
+    chart.innerHTML = d.dist.map(function(v, i) {
+      var pct = Math.round(v / total * 100);
+      return '<div class="audience-bar-wrap"><div class="audience-pct">' + pct + '%</div><div class="audience-bar" style="height:' + Math.max(4, pct * 0.7) + 'px"></div><div class="audience-label">' + (i+1) + '</div></div>';
+    }).join('');
+  } else if (d.type === 'change') {
+    document.getElementById('help-change').classList.add('used');
+  }
+});
+
+socket.on('million:stopped', function() {
+  document.getElementById('box').classList.remove('show');
+  if (timerInt) clearInterval(timerInt);
+});
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

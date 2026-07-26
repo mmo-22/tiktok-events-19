@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مزاد الكلمات - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root{--bg:#0d0d14;--surface:#181824;--surface2:#242436;--border:#2d2d40;--text:#f0f0f5;--muted:#9a9ab0;--gold:#fbbf24;--red:#ef4444;--green:#1dba72}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;padding:20px;min-height:100vh}
+  .wrap{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--surface);border-radius:12px}
+  .header h1{font-size:22px}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--muted)}
+  .badge.active{background:var(--gold);color:#000}
+  .card{background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--border)}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--gold)}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px}
+  .btn{padding:11px 16px;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px}
+  .actions{display:flex;gap:8px}
+  .bid-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:4px;font-size:13px}
+  .bid-rank{font-size:16px;width:24px;text-align:center}
+  .bid-name{flex:1;font-weight:700}
+  .bid-likes{color:var(--gold);font-weight:900;font-size:15px}
+  .history-item{padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:4px;font-size:13px;display:flex;justify-content:space-between}
+  .empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
+  .overlay-link{background:var(--surface2);padding:10px;border-radius:8px;font-family:monospace;font-size:12px;word-break:break-all;cursor:pointer}
+  .word-bank{display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;margin-bottom:12px}
+  .word-chip{padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;color:var(--muted);font-family:inherit;transition:all .15s}
+  .word-chip:hover{border-color:var(--gold);color:var(--gold)}
+  .word-chip.used{opacity:.2}
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>💬 مزاد الكلمات</h1><span class="badge" id="status-badge">متوقف</span></div>
+
+  <div class="card">
+    <div class="card-title">⚙️ الإعدادات</div>
+    <div class="row3">
+      <div class="field"><label>الكلمة</label><input type="text" id="word-input" placeholder="اكتب الكلمة..."></div>
+      <div class="field"><label>وصف (اختياري)</label><input type="text" id="hint-input" placeholder="مثال: لقب مميز"></div>
+      <div class="field"><label>وقت المزاد (ثواني)</label><input type="number" id="time-input" value="30" min="10" max="120"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🗂️ كلمات جاهزة</div>
+    <div class="word-bank" id="word-bank"></div>
+    <div class="actions">
+      <button class="btn" onclick="startAuction()" style="flex:1;background:var(--gold);color:#000;font-size:16px">🔨 ابدأ المزاد!</button>
+      <button class="btn" onclick="randomWord()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted)">🎲</button>
+      <button class="btn" onclick="stopAuction()" style="background:var(--red);color:#fff">⏹</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 المتنافسين (<span id="bid-count">0</span>)</div>
+    <div id="bids-list"><div class="empty">ابدأ المزاد وشاهد المنافسة</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📜 سجل المزادات</div>
+    <div id="history-list"><div class="empty">لا يوجد مزادات سابقة</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 رابط الـ Overlay</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="overlay-link" id="overlay-link" style="flex:1">—</div>
+      <button class="btn" onclick="copyLink()" style="background:var(--gold);color:#000;padding:10px 16px;font-size:13px">📋 نسخ</button>
+    </div>
+  </div>
+</div>
+<script>
+var params=new URLSearchParams(location.search),username=params.get('username')||'';
+var socket=io();if(username)socket.emit('join',{username});
+document.getElementById('overlay-link').textContent=location.origin+'/auction-overlay.html?username='+username;
+function copyLink(){navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);document.getElementById('overlay-link').style.borderColor='var(--gold)';setTimeout(function(){document.getElementById('overlay-link').style.borderColor='';},1000);}
+
+var WORDS = [
+  {w:"الأسطورة",h:"لقب"},{w:"الفارس",h:"لقب"},{w:"البطل",h:"لقب"},{w:"الملك",h:"لقب"},{w:"النجم",h:"لقب"},
+  {w:"الأمير",h:"لقب"},{w:"الوحش",h:"لقب"},{w:"الصاعقة",h:"لقب"},{w:"القائد",h:"لقب"},{w:"الظاهرة",h:"لقب"},
+  {w:"VIP",h:"عضوية"},{w:"مشرف",h:"منصب"},{w:"نائب",h:"منصب"},{w:"مساعد",h:"منصب"},{w:"سفير",h:"منصب"},
+  {w:"تاج ذهبي",h:"جائزة"},{w:"نجمة فضية",h:"جائزة"},{w:"درع البث",h:"جائزة"},{w:"وسام الشرف",h:"جائزة"},
+  {w:"أفضل متابع",h:"لقب"},{w:"صديق البث",h:"لقب"},{w:"داعم رقم 1",h:"لقب"},{w:"حارس البث",h:"لقب"},
+];
+var usedWords=new Set();
+var RANKS=['🥇','🥈','🥉','4️⃣','5️⃣'];
+var auctionHistory=[];
+
+function renderBank(){
+  document.getElementById('word-bank').innerHTML=WORDS.map(function(w,i){
+    return '<span class="word-chip '+(usedWords.has(i)?'used':'')+'" onclick="pickWord('+i+')">'+w.w+'</span>';
+  }).join('');
+}
+function pickWord(i){document.getElementById('word-input').value=WORDS[i].w;document.getElementById('hint-input').value=WORDS[i].h;usedWords.add(i);renderBank();}
+function randomWord(){var pool=WORDS.map(function(w,i){return{...w,idx:i};}).filter(function(w){return!usedWords.has(w.idx);});if(!pool.length){usedWords.clear();pool=WORDS.map(function(w,i){return{...w,idx:i};});}pickWord(pool[Math.floor(Math.random()*pool.length)].idx);}
+
+async function startAuction(){
+  var word=document.getElementById('word-input').value.trim();
+  var hint=document.getElementById('hint-input').value.trim();
+  var time=parseInt(document.getElementById('time-input').value)||30;
+  if(!word){alert('اكتب الكلمة');return;}
+  await fetch('/api/auction/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,word,hint,answerTime:time})});
+  document.getElementById('status-badge').textContent='🔨 مزاد!';
+  document.getElementById('status-badge').classList.add('active');
+  document.getElementById('bids-list').innerHTML='<div class="empty">بانتظار اللايكات...</div>';
+  document.getElementById('bid-count').textContent='0';
+}
+
+async function stopAuction(){
+  await fetch('/api/auction/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});
+  document.getElementById('status-badge').textContent='متوقف';
+  document.getElementById('status-badge').classList.remove('active');
+}
+
+socket.on('auction:bid',function(d){
+  document.getElementById('bid-count').textContent=d.totalBids;
+  var el=document.getElementById('bids-list');
+  el.innerHTML=(d.top5||[]).map(function(b,i){
+    return '<div class="bid-item"><span class="bid-rank">'+(RANKS[i]||i+1)+'</span><span class="bid-name">'+esc(b.name)+'</span><span class="bid-likes">❤️ '+b.likes+'</span></div>';
+  }).join('');
+});
+
+socket.on('auction:end',function(d){
+  document.getElementById('status-badge').textContent='انتهى';
+  document.getElementById('status-badge').classList.remove('active');
+  if(d.winner){
+    auctionHistory.unshift({word:d.word,winner:d.winner.name,likes:d.winner.likes});
+    renderHistory();
+  }
+});
+
+function renderHistory(){
+  var el=document.getElementById('history-list');
+  if(!auctionHistory.length){el.innerHTML='<div class="empty">لا يوجد مزادات سابقة</div>';return;}
+  el.innerHTML=auctionHistory.map(function(h){
+    return '<div class="history-item"><span>🔨 <strong>'+esc(h.word)+'</strong> → '+esc(h.winner)+'</span><span>❤️ '+h.likes+'</span></div>';
+  }).join('');
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+renderBank();
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>

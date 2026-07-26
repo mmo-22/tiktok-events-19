@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guess Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { background:transparent; width:100vw; height:100vh; font-family:'Tajawal',sans-serif; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+
+  :root {
+    --scale: 1;
+  }
+
+  .main-box {
+    position:relative;
+    background:rgba(0,0,0,.9);
+    border:2px solid rgba(255,215,0,.5);
+    border-radius:22px;
+    padding:calc(22px * var(--scale)) calc(28px * var(--scale));
+    min-width:calc(520px * var(--scale));
+    max-width:calc(780px * var(--scale));
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .15s;
+    overflow:hidden;
+  }
+  .main-box.show { opacity:1; }
+
+  .game-title {
+    font-size:calc(16px * var(--scale)); color:rgba(255,255,255,.5);
+    text-align:center; margin-bottom:calc(16px * var(--scale));
+  }
+  .game-title span { color:#ffd700; font-weight:900; }
+
+  .letters-row {
+    display:flex; justify-content:center; gap:calc(7px * var(--scale));
+    flex-wrap:wrap; margin-bottom:calc(12px * var(--scale)); direction:rtl;
+  }
+  .lbox {
+    width:calc(56px * var(--scale)); height:calc(66px * var(--scale)); border-radius:12px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(26px * var(--scale)); font-weight:900;
+    transition:all .3s;
+  }
+  .lbox.shown { background:rgba(37,244,238,.18); border:2px solid rgba(37,244,238,.55); color:#25f4ee; }
+  .lbox.hidden { background:rgba(255,255,255,.05); border:2px dashed rgba(255,255,255,.2); }
+  .lbox.revealed {
+    background:rgba(29,186,114,.25);
+    border:2px solid rgba(29,186,114,.7);
+    color:#1dba72;
+    animation:revealPop .4s ease;
+  }
+  @keyframes revealPop {
+    0% { transform:scale(.5); opacity:0; }
+    60% { transform:scale(1.15); }
+    100% { transform:scale(1); opacity:1; }
+  }
+
+  .hint-text { font-size:calc(22px * var(--scale)); color:#fff; text-align:center; margin-bottom:calc(18px * var(--scale)); font-weight:700; transition:color .3s; }
+
+  .divider { height:1px; background:rgba(255,215,0,.15); margin:0 0 calc(16px * var(--scale)); }
+
+  .lb-title { font-size:calc(13px * var(--scale)); font-weight:900; color:#ffd700; text-align:center; margin-bottom:calc(12px * var(--scale)); }
+
+  .lb-items { display:flex; justify-content:center; align-items:center; gap:calc(8px * var(--scale)); flex-wrap:wrap; }
+  .lb-item {
+    display:flex; flex-direction:column; align-items:center; gap:calc(5px * var(--scale));
+    padding:calc(8px * var(--scale)) calc(10px * var(--scale)) calc(10px * var(--scale));
+    border-radius:12px; background:rgba(255,255,255,.04);
+    width:calc(98px * var(--scale));
+  }
+  .lb-item.empty  { opacity:.25; }
+  .lb-item.rank-1 { background:rgba(255,215,0,.15); border:1px solid rgba(255,215,0,.35); }
+  .lb-item.rank-2 { background:rgba(192,192,192,.1); border:1px solid rgba(192,192,192,.25); }
+  .lb-item.rank-3 { background:rgba(205,127,50,.1); border:1px solid rgba(205,127,50,.25); }
+
+  .lb-rank { font-size:calc(18px * var(--scale)); }
+  .lb-av {
+    width:calc(44px * var(--scale)); height:calc(44px * var(--scale));
+    border-radius:50%; overflow:hidden;
+    background:rgba(255,255,255,.08); border:2px solid rgba(255,255,255,.15);
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(17px * var(--scale)); font-weight:700; color:#aaa;
+  }
+  .lb-av img { width:100%; height:100%; object-fit:cover; }
+  .lb-name {
+    font-size:calc(12px * var(--scale)); font-weight:700; color:#f0f0f5;
+    max-width:calc(90px * var(--scale));
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;
+  }
+  .lb-count { font-size:calc(11px * var(--scale)); color:#25f4ee; font-weight:700; background:rgba(37,244,238,.12); padding:2px 8px; border-radius:20px; }
+  .lb-empty-name { font-size:calc(11px * var(--scale)); color:rgba(255,255,255,.2); }
+
+  /* Confetti */
+  .confetti-layer {
+    position:absolute; inset:0; pointer-events:none;
+    overflow:hidden;
+  }
+  .confetti {
+    position:absolute; width:10px; height:14px;
+    opacity:0;
+    animation:confettiDrop 1.5s ease-out forwards;
+  }
+  @keyframes confettiDrop {
+    0%   { transform:translate(0,0) rotate(0deg); opacity:1; }
+    100% { transform:translate(var(--x), var(--y)) rotate(var(--r)); opacity:0; }
+  }
+
+  /* Winner popup — وسط المربع */
+  #new-winner {
+    position:absolute;
+    top:50%; left:50%;
+    transform:translate(-50%,-50%) scale(.7);
+    background:rgba(0,0,0,.95); border:3px solid #ffd700;
+    border-radius:18px; padding:16px 26px; text-align:center;
+    opacity:0; transition:all .3s cubic-bezier(.34,1.56,.64,1);
+    pointer-events:none; display:flex; align-items:center; gap:14px;
+    z-index:50; box-shadow:0 0 40px rgba(255,215,0,.3);
+  }
+  #new-winner.show { transform:translate(-50%,-50%) scale(1); opacity:1; }
+  .nw-av { width:54px; height:54px; border-radius:50%; overflow:hidden; flex-shrink:0; background:#1a1a24; display:flex; align-items:center; justify-content:center; font-size:20px; border:2px solid rgba(255,215,0,.3); }
+  .nw-av img { width:100%; height:100%; object-fit:cover; }
+  .nw-rank { font-size:13px; color:#aaa; margin-bottom:2px; }
+  .nw-name { font-size:22px; font-weight:900; color:#ffd700; }
+
+  /* Top 5 modal - end of round */
+  #top5-modal {
+    position:absolute; inset:0;
+    background:rgba(0,0,0,.97);
+    border-radius:22px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:24px;
+    opacity:0; pointer-events:none;
+    transition:opacity .4s;
+    z-index:100;
+  }
+  #top5-modal.show { opacity:1; }
+  .top5-title {
+    font-size:calc(24px * var(--scale));
+    color:#ffd700; font-weight:900;
+    margin-bottom:calc(18px * var(--scale));
+    text-align:center;
+  }
+  .top5-subtitle {
+    font-size:calc(14px * var(--scale));
+    color:rgba(255,255,255,.5);
+    margin-bottom:calc(20px * var(--scale));
+  }
+  .top5-list {
+    display:flex; flex-direction:row; justify-content:center; align-items:stretch;
+    gap:calc(10px * var(--scale));
+    width:100%; max-width:calc(800px * var(--scale));
+    flex-wrap:nowrap;
+  }
+  .top5-item {
+    display:flex; flex-direction:column; align-items:center; gap:calc(8px * var(--scale));
+    padding:calc(14px * var(--scale)) calc(8px * var(--scale));
+    border-radius:14px;
+    background:rgba(255,255,255,.05);
+    flex:1; min-width:0;
+    animation:slideInTop 0.5s cubic-bezier(.34,1.56,.64,1) backwards;
+    text-align:center;
+  }
+  .top5-item.rank-1 { background:linear-gradient(90deg,rgba(255,215,0,.2),rgba(255,215,0,.05)); border:1px solid rgba(255,215,0,.4); }
+  .top5-item.rank-2 { background:linear-gradient(90deg,rgba(192,192,192,.15),rgba(192,192,192,.04)); border:1px solid rgba(192,192,192,.3); }
+  .top5-item.rank-3 { background:linear-gradient(90deg,rgba(205,127,50,.15),rgba(205,127,50,.04)); border:1px solid rgba(205,127,50,.3); }
+  .top5-item:nth-child(1) { animation-delay:0s; }
+  .top5-item:nth-child(2) { animation-delay:.1s; }
+  .top5-item:nth-child(3) { animation-delay:.2s; }
+  .top5-item:nth-child(4) { animation-delay:.3s; }
+  .top5-item:nth-child(5) { animation-delay:.4s; }
+  .top5-rank { font-size:calc(30px * var(--scale)); }
+  .top5-av {
+    width:calc(64px * var(--scale)); height:calc(64px * var(--scale));
+    border-radius:50%; overflow:hidden; flex-shrink:0;
+    background:rgba(255,255,255,.1); display:flex; align-items:center; justify-content:center;
+    font-size:calc(22px * var(--scale)); font-weight:700; color:#aaa;
+    border:2px solid rgba(255,255,255,.15);
+  }
+  .top5-av img { width:100%; height:100%; object-fit:cover; }
+  .top5-name {
+    font-size:calc(13px * var(--scale)); font-weight:700; color:#f0f0f5;
+    width:100%;
+    word-break:break-word;
+    line-height:1.2;
+  }
+  .top5-score {
+    font-size:calc(16px * var(--scale)); font-weight:900; color:#25f4ee;
+    background:rgba(37,244,238,.15); padding:3px calc(12px * var(--scale));
+    border-radius:20px;
+  }
+  @keyframes slideInTop {
+    from { opacity:0; transform:translateY(20px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="main-box" id="main-box">
+  <div class="game-title">💡 خمّن <span>الكلمة</span>!</div>
+  <div class="letters-row" id="letters-row"></div>
+  <div class="hint-text" id="hint-text"></div>
+  <div class="divider"></div>
+  <div class="lb-title">🏆 أول من يخمّن</div>
+  <div class="lb-items" id="lb-items"></div>
+  <div class="confetti-layer" id="confetti-layer"></div>
+
+  <!-- popup الفائز — وسط المربع -->
+  <div id="new-winner">
+    <div class="nw-av" id="nw-av"></div>
+    <div>
+      <div class="nw-rank" id="nw-rank"></div>
+      <div class="nw-name" id="nw-name"></div>
+    </div>
+  </div>
+
+  <!-- Top 5 نهاية الجولة -->
+  <div id="top5-modal">
+    <div class="top5-title">🏆 أبطال الفعالية</div>
+    <div class="top5-subtitle">أعلى 5 مخمّنين</div>
+    <div class="top5-list" id="top5-list"></div>
+  </div>
+</div>
+
+<script>
+const params   = new URLSearchParams(location.search);
+const username = params.get('username') || '';
+const socket   = io({ reconnection: true, reconnectionDelay: 500, reconnectionAttempts: Infinity });
+let nwTimer    = null;
+let hideTimer  = null;
+let winners    = [];
+let currentHint = '';
+
+// Font scale - يأتي من السيرفر/صفحة التحكم
+let scale = 1;
+function applyScale() {
+  document.documentElement.style.setProperty('--scale', scale);
+}
+applyScale();
+
+socket.on('guess:scale', ({ scale: s }) => {
+  scale = s || 1;
+  applyScale();
+});
+
+function joinRoom() {
+  if (username) {
+    socket.emit('join', { username });
+    fetch(`/api/guess/${username}`).then(r => r.json()).then(data => {
+      winners = data.winners || [];
+      currentHint = data.hint || '';
+      if (typeof data.scale === 'number') { scale = data.scale; applyScale(); }
+      if (data.active) {
+        renderLetters(data.length, data.letters || []);
+        document.getElementById('hint-text').textContent = currentHint ? `💡 ${currentHint}` : '';
+        renderLeaderboard();
+        document.getElementById('main-box').classList.add('show');
+      }
+    });
+  }
+}
+socket.on('connect', joinRoom);
+joinRoom();
+
+socket.on('guess:started', ({ length, hint, letters, winners: w }) => {
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  // أخف Top 5 لو كان ظاهر
+  document.getElementById('top5-modal').classList.remove('show');
+  winners = w || [];
+  currentHint = hint || '';
+  renderLetters(length, letters || []);
+  document.getElementById('hint-text').textContent = currentHint ? `💡 ${currentHint}` : '';
+  document.getElementById('hint-text').style.color = '';
+  renderLeaderboard();
+  document.getElementById('main-box').classList.add('show');
+});
+
+socket.on('guess:stopped', ({ top5 }) => {
+  if (hideTimer) clearTimeout(hideTimer);
+  if (top5 && top5.length) {
+    renderTop5(top5);
+    document.getElementById('top5-modal').classList.add('show');
+    // أخف القائمة بعد 5 دقائق
+    hideTimer = setTimeout(() => {
+      document.getElementById('top5-modal').classList.remove('show');
+      document.getElementById('main-box').classList.remove('show');
+    }, 5 * 60 * 1000);
+  } else {
+    hideTimer = setTimeout(() => {
+      document.getElementById('main-box').classList.remove('show');
+    }, 8000);
+  }
+});
+
+socket.on('guess:won', ({ winner, winners: w }) => {
+  winners = w || [];
+  renderLeaderboard();
+  showNewWinner(winner);
+  fireConfetti();
+});
+
+socket.on('guess:reveal', ({ word }) => {
+  // أظهر الجواب الكامل في المربعات
+  const row = document.getElementById('letters-row');
+  row.innerHTML = [...word].map(c => `<div class="lbox revealed">${escHtml(c)}</div>`).join('');
+  // أيضاً في التلميح
+  const hint = document.getElementById('hint-text');
+  hint.innerHTML = `✅ الجواب: <span style="color:#1dba72">${escHtml(word)}</span>`;
+  hint.style.color = '#1dba72';
+});
+
+function renderLetters(length, letters) {
+  const row = document.getElementById('letters-row');
+  const map = {};
+  letters.forEach(({i,c}) => map[i] = c);
+  row.innerHTML = Array.from({length}, (_,i) => {
+    const shown = map[i] !== undefined;
+    return `<div class="lbox ${shown?'shown':'hidden'}">${shown?escHtml(map[i]):''}</div>`;
+  }).join('');
+}
+
+function renderLeaderboard() {
+  const el = document.getElementById('lb-items');
+  const rankIcon  = i => ['🥇','🥈','🥉','4️⃣','5️⃣'][i];
+  const rankClass = i => ['rank-1','rank-2','rank-3','',''][i];
+
+  el.innerHTML = Array.from({length:5}, (_,i) => {
+    const w = winners[i];
+    if (w) {
+      const av = w.avatar
+        ? `<img src="${w.avatar}" onerror="this.parentElement.innerHTML='${escHtml(w.name[0])}'">` 
+        : escHtml(w.name[0]);
+      return `<div class="lb-item ${rankClass(i)}">
+        <span class="lb-rank">${rankIcon(i)}</span>
+        <div class="lb-av">${av}</div>
+        <span class="lb-name">${escHtml(w.name)}</span>
+        <span class="lb-count">${w.totalWords || 1} 🔤</span>
+      </div>`;
+    }
+    return `<div class="lb-item empty">
+      <span class="lb-rank">${rankIcon(i)}</span>
+      <div class="lb-av">?</div>
+      <span class="lb-empty-name">—</span>
+      <span class="lb-empty-name">—</span>
+    </div>`;
+  }).join('');
+}
+
+function showNewWinner(winner) {
+  if (nwTimer) clearTimeout(nwTimer);
+  const ranks = ['🥇 أول من خمّن!','🥈 ثاني!','🥉 ثالث!','4️⃣ رابع!','5️⃣ خامس!'];
+  const av = winner.avatar
+    ? `<img src="${winner.avatar}" onerror="this.parentElement.innerHTML='${escHtml(winner.name[0])}'">` 
+    : escHtml(winner.name[0]);
+  document.getElementById('nw-av').innerHTML = av;
+  document.getElementById('nw-rank').textContent = ranks[(winner.rank||1)-1] || '✅';
+  document.getElementById('nw-name').textContent = winner.name;
+  document.getElementById('new-winner').classList.add('show');
+  nwTimer = setTimeout(() => document.getElementById('new-winner').classList.remove('show'), 3500);
+}
+
+function fireConfetti() {
+  const layer = document.getElementById('confetti-layer');
+  const box   = document.getElementById('main-box');
+  const colors = ['#ffd700','#ff0050','#25f4ee','#1dba72','#a78bfa','#f59e0b'];
+  const cx = box.offsetWidth / 2;
+  const cy = box.offsetHeight / 2;
+  for (let i = 0; i < 28; i++) {
+    const p = document.createElement('div');
+    p.className = 'confetti';
+    p.style.background = colors[i % colors.length];
+    p.style.left = cx + 'px';
+    p.style.top  = cy + 'px';
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = 120 + Math.random() * 200;
+    p.style.setProperty('--x', Math.cos(angle) * dist + 'px');
+    p.style.setProperty('--y', Math.sin(angle) * dist + 'px');
+    p.style.setProperty('--r', (Math.random() * 720) + 'deg');
+    p.style.animationDelay = (Math.random() * 0.15) + 's';
+    layer.appendChild(p);
+    setTimeout(() => p.remove(), 1700);
+  }
+}
+
+function renderTop5(players) {
+  const el = document.getElementById('top5-list');
+  const rankIcon = i => ['🥇','🥈','🥉','🏅','🏅'][i];
+  const rankClass = i => ['rank-1','rank-2','rank-3','',''][i];
+  el.innerHTML = players.slice(0,5).map((p, i) => {
+    const av = p.avatar
+      ? `<img src="${p.avatar}" onerror="this.parentElement.innerHTML='${escHtml(p.name[0])}'">` 
+      : escHtml(p.name[0]);
+    return `<div class="top5-item ${rankClass(i)}">
+      <span class="top5-rank">${rankIcon(i)}</span>
+      <div class="top5-av">${av}</div>
+      <span class="top5-name">${escHtml(p.name)}</span>
+      <span class="top5-score">${p.totalWords} 🔤</span>
+    </div>`;
+  }).join('');
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

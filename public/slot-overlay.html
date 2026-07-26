@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slot Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:transparent;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;font-family:'Tajawal',sans-serif;overflow:hidden}
+
+.main{position:relative;width:420px;display:flex;flex-direction:column;align-items:center;opacity:0;transition:opacity .3s}
+.main.show{opacity:1}
+
+.reg-banner{background:rgba(0,0,0,.85);border:2px solid #ffd700;border-radius:18px;padding:18px 28px;text-align:center;margin-bottom:16px;width:100%;backdrop-filter:blur(8px)}
+.reg-title{font-size:16px;font-weight:900;color:#ffd700;margin-bottom:4px}
+.reg-keyword{font-size:22px;font-weight:900;color:#fff;margin-bottom:4px}
+.reg-count{font-size:13px;color:rgba(255,255,255,.5)}
+.reg-timer{font-size:28px;font-weight:900;color:#ff0050;margin-top:4px}
+.live-entries{width:100%;max-height:300px;overflow:hidden;display:flex;flex-direction:column;gap:4px;margin-top:12px}
+.live-entry{background:rgba(255,255,255,.08);border-radius:10px;padding:8px 14px;text-align:center;font-size:14px;font-weight:700;color:#fff;animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateY(-10px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+/* Slot machine */
+.slot-container{position:relative;width:380px;overflow:hidden;border-radius:24px;background:rgba(255,255,255,.95);box-shadow:0 8px 40px rgba(0,0,0,.15)}
+.slot-track{position:absolute;width:100%;will-change:transform}
+.slot-card{width:calc(100% - 40px);margin:6px 20px;padding:16px 20px;border-radius:16px;background:rgba(0,0,0,.03);text-align:center;font-size:18px;font-weight:700;color:#888;display:flex;align-items:center;justify-content:center;gap:10px;height:56px}
+.slot-card .card-avatar{width:36px;height:36px;border-radius:50%;overflow:hidden;background:#eee;flex-shrink:0;display:none}
+.slot-card .card-avatar img{width:100%;height:100%;object-fit:cover}
+
+/* Winner card style */
+.slot-card.winner-active{color:#fff;font-size:24px;font-weight:900;padding:24px;height:110px;border-radius:20px;box-shadow:0 4px 24px rgba(0,0,0,.2);flex-direction:column;gap:6px}
+.slot-card.winner-active .card-avatar{display:block;width:56px;height:56px;border:3px solid rgba(255,255,255,.5)}
+
+/* Center indicator line */
+.slot-center-line{position:absolute;top:50%;left:10px;right:10px;height:2px;background:rgba(255,0,80,.3);z-index:10;transform:translateY(-1px);display:none}
+
+/* Fade edges */
+.slot-container::before,.slot-container::after{content:'';position:absolute;left:0;right:0;height:90px;z-index:5;pointer-events:none}
+.slot-container::before{top:0;background:linear-gradient(to bottom,rgba(255,255,255,1) 0%,transparent 100%)}
+.slot-container::after{bottom:0;background:linear-gradient(to top,rgba(255,255,255,1) 0%,transparent 100%)}
+
+.confetti-layer{position:fixed;inset:0;pointer-events:none;z-index:100}
+</style>
+</head>
+<body>
+
+<div class="main" id="main">
+  <div class="reg-banner" id="reg-banner" style="display:none">
+    <div class="reg-title">اكتب في الشات</div>
+    <div class="reg-keyword" id="reg-keyword">اشتراك</div>
+    <div class="reg-count" id="reg-count">0 مشترك</div>
+    <div class="reg-timer" id="reg-timer"></div>
+    <div class="live-entries" id="live-entries"></div>
+  </div>
+
+  <div class="slot-container" id="slot-container" style="display:none">
+    <div class="slot-track" id="slot-track"></div>
+    <div class="slot-center-line" id="center-line"></div>
+  </div>
+</div>
+
+<div class="confetti-layer" id="confetti-layer"></div>
+
+<script>
+var params = new URLSearchParams(location.search);
+var username = params.get('username') || '';
+var winnerColor = decodeURIComponent(params.get('color') || 'linear-gradient(135deg,#ff0050,#a57afa)');
+var visibleCount = parseInt(params.get('visible') || '3');
+var socket = io();
+
+var COLORS = ['#ff0050','#25f4ee','#ffd700','#1dba72','#a57afa','#f59e0b','#3b82f6','#ec4899','#10b981','#f97316'];
+
+var entries = [];
+var spinning = false;
+var regTimer = null;
+var regEndTime = 0;
+
+if (username) socket.emit('join', { username });
+
+// Live color update from control page
+socket.on('slot:color', function(d) {
+  winnerColor = d.color || winnerColor;
+});
+
+fetch('/api/wheel/' + username).then(function(r){ return r.json(); }).then(function(data){
+  entries = data.entries || [];
+  if (data.accepting) {
+    showRegBanner(data.keyword || 'اشتراك', data.count || 0);
+    renderLiveEntries();
+    if (data.regEndTime > 0) { regEndTime = data.regEndTime; startRegTimer(); }
+  }
+});
+
+socket.on('wheel:update', function(d) {
+  entries = d.entries || [];
+  if (document.getElementById('reg-banner').style.display !== 'none') {
+    document.getElementById('reg-count').textContent = (d.count || 0) + ' مشترك';
+    if (d.newEntry) addLiveEntry(d.newEntry);
+  }
+});
+
+socket.on('wheel:registration', function(d) {
+  if (d.accepting) {
+    showRegBanner(d.keyword || 'اشتراك', d.count || 0);
+    if (d.endTime > 0) { regEndTime = d.endTime; startRegTimer(); }
+    document.getElementById('main').classList.add('show');
+    document.getElementById('live-entries').innerHTML = '';
+  } else {
+    // Registration stopped — show slot container with entries ready
+    if (regTimer) { clearInterval(regTimer); regTimer = null; }
+    document.getElementById('reg-timer').textContent = '';
+    // Show entries in slot container ready for spin
+    if (entries.length > 0) {
+      showIdleSlot();
+    }
+  }
+});
+
+socket.on('wheel:spin', function(d) {
+  if (!d.entries || d.entries.length < 2) return;
+  entries = d.entries;
+  if (spinning) return;
+  spinning = true;
+  document.getElementById('slot-container').style.display = 'block';
+  document.getElementById('main').classList.add('show');
+  startSlotAnimation(entries, d.winner, d.winnerIndex, d.duration, d.speed);
+});
+
+function showRegBanner(keyword, count) {
+  document.getElementById('reg-banner').style.display = 'block';
+  document.getElementById('reg-keyword').textContent = keyword;
+  document.getElementById('reg-count').textContent = count + ' مشترك';
+  document.getElementById('slot-container').style.display = 'none';
+  document.getElementById('main').classList.add('show');
+}
+
+function addLiveEntry(entry) {
+  var el = document.getElementById('live-entries');
+  var div = document.createElement('div');
+  div.className = 'live-entry';
+  div.textContent = entry.name;
+  el.prepend(div);
+  while (el.children.length > visibleCount) el.removeChild(el.lastChild);
+}
+
+function renderLiveEntries() {
+  var el = document.getElementById('live-entries');
+  el.innerHTML = '';
+  var show = entries.slice(-visibleCount).reverse();
+  show.forEach(function(e) {
+    var div = document.createElement('div');
+    div.className = 'live-entry';
+    div.style.animation = 'none';
+    div.textContent = e.name;
+    el.appendChild(div);
+  });
+}
+
+function startRegTimer() {
+  if (regTimer) clearInterval(regTimer);
+  regTimer = setInterval(function() {
+    var remaining = Math.max(0, regEndTime - Date.now());
+    var sec = Math.ceil(remaining / 1000);
+    document.getElementById('reg-timer').textContent = sec > 0 ? sec + 's' : '';
+    if (remaining <= 0) { clearInterval(regTimer); regTimer = null; }
+  }, 200);
+}
+
+function showIdleSlot() {
+  var track = document.getElementById('slot-track');
+  var container = document.getElementById('slot-container');
+  var normalH = 68;
+  var containerH = normalH * 7;
+  container.style.height = containerH + 'px';
+  container.style.display = 'block';
+
+  // Show entries as static cards
+  var html = '';
+  for (var i = 0; i < Math.max(entries.length * 2, 10); i++) {
+    var idx = i % entries.length;
+    var e = entries[idx];
+    html += '<div class="slot-card">' + esc(e.name) + '</div>';
+  }
+  track.innerHTML = html;
+  track.style.transition = 'none';
+  track.style.transform = 'translateY(0)';
+}
+
+function startSlotAnimation(allEntries, winner, winnerIndex, duration, speed) {
+  var track = document.getElementById('slot-track');
+  var container = document.getElementById('slot-container');
+  
+  // Set container height based on visible entries
+  var normalH = 68; // card height + margins
+  var winnerH = 122;
+  var containerH = normalH * 6 + winnerH; // show ~6 normal cards + winner
+  container.style.height = containerH + 'px';
+  
+  // Build cards
+  var speedMult = speed === 'fast' ? 8 : speed === 'slow' ? 3 : 5;
+  var cardsBeforeWinner = allEntries.length * speedMult;
+  var winnerPos = cardsBeforeWinner;
+  var cardsAfterWinner = Math.max(10, allEntries.length);
+  var totalCards = winnerPos + 1 + cardsAfterWinner;
+  
+  var cards = [];
+  for (var i = 0; i < totalCards; i++) {
+    var idx = i % allEntries.length;
+    var isWinner = (i === winnerPos);
+    var entry = isWinner ? winner : allEntries[idx];
+    var color = COLORS[idx % COLORS.length];
+    cards.push({ name: entry.name, avatar: entry.avatar, isWinner: isWinner, color: color, ci: i });
+  }
+
+  // Render
+  track.innerHTML = cards.map(function(c) {
+    if (c.isWinner) {
+      var av = c.avatar ? '<div class="card-avatar"><img src="' + c.avatar + '" onerror="this.style.display=\'none\'"></div>' : '';
+      return '<div class="slot-card winner-active" style="background:' + winnerColor + '">' + av + '<span>' + esc(c.name) + '</span></div>';
+    }
+    return '<div class="slot-card">' + esc(c.name) + '</div>';
+  }).join('');
+
+  // Measure winner position
+  track.style.transition = 'none';
+  track.style.transform = 'translateY(0)';
+  track.offsetHeight;
+  
+  var winnerEl = track.querySelector('.winner-active');
+  if (!winnerEl) { spinning = false; return; }
+  
+  var winnerTop = winnerEl.offsetTop;
+  var winnerElH = winnerEl.offsetHeight;
+  var finalY = -(winnerTop - (containerH / 2) + (winnerElH / 2));
+
+  var totalMs = duration || 5000;
+
+  requestAnimationFrame(function() {
+    track.style.transition = 'transform ' + totalMs + 'ms cubic-bezier(0.05, 0.7, 0.1, 1)';
+    track.style.transform = 'translateY(' + finalY + 'px)';
+  });
+
+  setTimeout(function() {
+    spinning = false;
+    fireConfetti();
+  }, totalMs + 500);
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function fireConfetti() {
+  var layer = document.getElementById('confetti-layer');
+  var cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+  for (var i = 0; i < 50; i++) {
+    var p = document.createElement('div');
+    var color = COLORS[i % COLORS.length];
+    var size = 6 + Math.random() * 6;
+    var isCircle = Math.random() > 0.5;
+    p.style.cssText = 'position:absolute;width:'+size+'px;height:'+(size*(isCircle?1:1.8))+'px;left:'+cx+'px;top:'+cy+'px;background:'+color+';border-radius:'+(isCircle?'50%':'2px')+';';
+    layer.appendChild(p);
+    var angle = Math.random() * Math.PI * 2;
+    var dist = 120 + Math.random() * 300;
+    var dur = 1200 + Math.random() * 800;
+    p.animate([
+      { transform:'translate(0,0) rotate(0deg) scale(1)', opacity:1 },
+      { transform:'translate('+Math.cos(angle)*dist+'px, '+Math.sin(angle)*dist+'px) rotate('+(600+Math.random()*600)+'deg) scale(0)', opacity:0 }
+    ], { duration: dur, easing:'cubic-bezier(0.25,0.46,0.45,0.94)' });
+    setTimeout((function(el){ return function(){ el.remove(); }; })(p), dur);
+  }
+}
+</script>
+<script src="/rules-overlay.js"></script>
+</body>
+</html>

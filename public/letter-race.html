@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سباق الحروف - تحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  :root{--bg:#0d0d14;--surface:#181824;--surface2:#242436;--border:#2d2d40;--text:#f0f0f5;--muted:#9a9ab0;--green:#22c55e;--red:#ef4444;--gold:#ffd700}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;padding:20px;min-height:100vh}
+  .wrap{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--surface);border-radius:12px}
+  .header h1{font-size:22px}
+  .badge{font-size:12px;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--muted)}
+  .badge.active{background:var(--green);color:#fff}
+  .card{background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--border)}
+  .card-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--green)}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input,.field select{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px}
+  .btn{padding:11px 16px;border:none;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;font-size:14px}
+  .actions{display:flex;gap:8px}
+  .letters-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .letter-btn{width:36px;height:36px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:16px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;transition:all .15s}
+  .letter-btn:hover{border-color:var(--green);color:var(--green);background:rgba(34,197,94,.06)}
+  .letter-btn.used{opacity:.2}
+  .preview{background:#111;border-radius:14px;padding:20px;text-align:center}
+  .preview-letter{font-size:64px;font-weight:900;color:var(--green)}
+  .winner-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:4px;font-size:13px}
+  .winner-rank{font-size:16px;width:24px;text-align:center}
+  .winner-name{flex:1;font-weight:700}
+  .winner-words{font-size:11px;color:var(--muted)}
+  .empty{text-align:center;padding:24px;color:var(--muted);font-size:13px}
+  .overlay-link{background:var(--surface2);padding:10px;border-radius:8px;font-family:monospace;font-size:12px;word-break:break-all;cursor:pointer}
+  .live-feed{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+  .live-item{padding:6px 10px;background:var(--surface2);border-radius:6px;font-size:12px}
+  .live-item.word{color:var(--green)}.live-item.win{color:var(--gold)}
+</style>
+<style>
+/* تحسينات الجوال المشتركة */
+@media(max-width:600px){
+  input,select,textarea{font-size:16px !important}
+  button{min-height:40px}
+  body{padding-left:8px !important;padding-right:8px !important}
+}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>🏃 سباق الحروف</h1><span class="badge" id="status-badge">متوقف</span></div>
+
+  <div class="card">
+    <div class="card-title">⚙️ الإعدادات</div>
+    <div class="row3">
+      <div class="field"><label>عدد الكلمات المطلوبة</label><input type="number" id="words-needed" value="3" min="1" max="10"></div>
+      <div class="field"><label>الوقت (ثواني)</label><input type="number" id="answer-time" value="30" min="10" max="120"></div>
+      <div class="field"><label>الحرف (اتركه فاضي = عشوائي)</label><input type="text" id="letter-input" maxlength="1" placeholder="عشوائي" style="text-align:center;font-size:20px;font-weight:900"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔤 اختر حرف</div>
+    <div class="letters-grid" id="letters-grid"></div>
+    <div class="actions">
+      <button class="btn" onclick="startRace()" style="flex:1;background:var(--green);color:#fff;font-size:16px">🏃 ابدأ السباق!</button>
+      <button class="btn" onclick="startRandom()" style="flex:1;background:var(--gold);color:#000">🎲 حرف عشوائي</button>
+      <button class="btn" onclick="stopRace()" style="background:var(--red);color:#fff">⏹ إيقاف</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👁️ المعاينة</div>
+    <div class="preview"><div class="preview-letter" id="preview-letter">—</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 البث المباشر</div>
+    <div class="live-feed" id="live-feed"><div class="empty">ابدأ السباق وشاهد الإجابات</div></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">🏆 الفائزين (<span id="winner-count">0</span>)</div>
+    </div>
+    <div id="winners-list"><div class="empty">لا يوجد فائزين بعد</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔗 رابط الـ Overlay</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="overlay-link" id="overlay-link" style="flex:1">—</div>
+      <button class="btn" onclick="copyLink()" style="background:var(--green);color:#fff;padding:10px 16px;font-size:13px">📋 نسخ</button>
+    </div>
+  </div>
+</div>
+<script>
+var params = new URLSearchParams(location.search);
+var username = params.get('username') || '';
+var socket = io();
+if (username) socket.emit('join', { username });
+document.getElementById('overlay-link').textContent = location.origin + '/letter-race-overlay.html?username=' + username;
+function copyLink(){navigator.clipboard.writeText(document.getElementById('overlay-link').textContent);document.getElementById('overlay-link').style.borderColor='#22c55e';setTimeout(function(){document.getElementById('overlay-link').style.borderColor='';},1000);}
+
+var LETTERS = 'ابتثجحخدذرزسشصضطظعغفقكلمنهوي'.split('');
+var usedLetters = new Set();
+var RANKS = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+
+// Render letter buttons
+function renderLetters() {
+  document.getElementById('letters-grid').innerHTML = LETTERS.map(function(l) {
+    return '<button class="letter-btn '+(usedLetters.has(l)?'used':'')+'" onclick="selectLetter(\''+l+'\')">'+l+'</button>';
+  }).join('');
+}
+
+function selectLetter(l) {
+  document.getElementById('letter-input').value = l;
+  document.getElementById('preview-letter').textContent = l;
+}
+
+async function startRace() {
+  var letter = document.getElementById('letter-input').value.trim() || '';
+  var wordsNeeded = parseInt(document.getElementById('words-needed').value) || 3;
+  var answerTime = parseInt(document.getElementById('answer-time').value) || 30;
+  var res = await fetch('/api/letter-race/start', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, letter, wordsNeeded, answerTime }),
+  });
+  var data = await res.json();
+  if (data.ok) {
+    document.getElementById('preview-letter').textContent = data.letter;
+    document.getElementById('letter-input').value = data.letter;
+    document.getElementById('status-badge').textContent = '🟢 سباق!';
+    document.getElementById('status-badge').classList.add('active');
+    usedLetters.add(data.letter);
+    renderLetters();
+    document.getElementById('live-feed').innerHTML = '';
+    document.getElementById('winners-list').innerHTML = '<div class="empty">لا يوجد فائزين بعد</div>';
+    document.getElementById('winner-count').textContent = '0';
+  }
+}
+
+function startRandom() {
+  document.getElementById('letter-input').value = '';
+  startRace();
+}
+
+async function stopRace() {
+  await fetch('/api/letter-race/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ username }) });
+  document.getElementById('status-badge').textContent = 'متوقف';
+  document.getElementById('status-badge').classList.remove('active');
+}
+
+socket.on('letter-race:word', function(d) {
+  var el = document.getElementById('live-feed');
+  if (el.querySelector('.empty')) el.innerHTML = '';
+  var div = document.createElement('div');
+  div.className = 'live-item word';
+  div.textContent = '✅ ' + d.player + ': ' + d.word + ' (' + d.playerWords + '/' + d.needed + ')';
+  el.prepend(div);
+  while (el.children.length > 30) el.removeChild(el.lastChild);
+});
+
+socket.on('letter-race:winner', function(d) {
+  document.getElementById('winner-count').textContent = d.total;
+  var el = document.getElementById('winners-list');
+  if (d.rank === 1) el.innerHTML = '';
+  var div = document.createElement('div');
+  div.className = 'winner-item';
+  div.innerHTML = '<span class="winner-rank">'+(RANKS[d.rank-1]||d.rank)+'</span><span class="winner-name">'+esc(d.player)+'</span><span class="winner-words">'+d.words.join(' • ')+'</span>';
+  el.appendChild(div);
+  // Feed
+  var feed = document.getElementById('live-feed');
+  var fi = document.createElement('div');
+  fi.className = 'live-item win';
+  fi.textContent = '🏆 ' + d.player + ' أنهى #' + d.rank + '!';
+  feed.prepend(fi);
+});
+
+socket.on('letter-race:end', function() {
+  document.getElementById('status-badge').textContent = 'انتهى';
+  document.getElementById('status-badge').classList.remove('active');
+});
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+renderLetters();
+</script>
+<script src="/rules-control.js"></script>
+</body>
+</html>
