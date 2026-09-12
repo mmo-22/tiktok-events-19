@@ -8,6 +8,17 @@ const EULER_KEY = process.env.EULER_API_KEY || process.env.TIKTOOL_API_KEY; // f
 const EULER_WS_HOST = process.env.EULER_WS_URL || 'wss://ws.eulerstream.com';
 if (!EULER_KEY) console.log('[WARNING] EULER_API_KEY not set! Add it in Railway environment variables.');
 const path = require('path');
+const kickProvider = require('./providers/kick');
+const kickSignature = require('./providers/kick-signature');
+
+// ── المنصات ────────────────────────────────────────────────
+// الغرفة تُعرَّف بمفتاحها: "username" = تيك توك، "kick:username" = كيك
+function platformOf(key) {
+  return key.startsWith('kick:') ? 'kick' : 'tiktok';
+}
+function slugOf(key) {
+  return key.startsWith('kick:') ? key.slice(5) : key;
+}
 
 const app = express();
 const httpServer = createServer(app);
@@ -16,6 +27,30 @@ const io = new Server(httpServer, {
   transports: ['websocket', 'polling'],
   pingInterval: 25000,
   pingTimeout: 20000,
+});
+
+// ── مستقبل webhooks من Kick ────────────────────────────────
+// لازم يكون قبل express.json لأن التحقق من التوقيع يحتاج الجسم الخام
+app.post('/webhooks/kick', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
+  const eventType = req.get('Kick-Event-Type');
+  if (!eventType) return res.status(400).send('missing event type');
+
+  const check = await kickSignature.verify(req.headers, req.body);
+  if (!check.ok) {
+    console.log(`[Kick] رفض webhook: ${check.reason}`);
+    return res.status(401).send('invalid signature');
+  }
+
+  // نرد 200 فوراً — Kick يلغي الاشتراك لو تكرر فشل التسليم
+  res.status(200).send('ok');
+
+  try {
+    const payload = JSON.parse(req.body.toString('utf8'));
+    const routed = kickProvider.routeWebhook(eventType, payload);
+    if (!routed) console.log(`[Kick] حدث ${eventType} لقناة غير متصلة — تجاهل`);
+  } catch (err) {
+    console.log(`[Kick] فشل تحليل webhook: ${err.message}`);
+  }
 });
 
 app.use(express.json({ limit: '5mb' }));
@@ -179,18 +214,24 @@ async function connectRoom(username, sessionid = null, opts = {}) {
   const EventEmitter = require('events');
   const tiktok = new EventEmitter();
 
-  // Connect via EulerStream WebSocket
-  // الاتصال من السيرفر مباشرة بالـ apiKey (ما يحتاج JWT — الـ JWT مخصص لتطبيقات المتصفح)
-  const wsParams = new URLSearchParams({
-    uniqueId: key,
-    apiKey: EULER_KEY || '',
-    'features.bundleEvents': 'true',      // يجمّع الأحداث داخل packet.messages
-    'features.normalizeUniqueId': 'true',
-    'features.syntheticPresence': 'true', // أحداث دخول/خروج المشاهدين
-  });
-  const wsUrl = `${EULER_WS_HOST}?${wsParams.toString()}`;
-
-  const ws = new WebSocket(wsUrl);
+  // ── إنشاء الاتصال حسب المنصة ────────────────────────────
+  let ws;
+  if (platformOf(key) === 'kick') {
+    // Kick: واجهة شبيهة بـ WebSocket فوق Webhooks + استعلام مشاهدين
+    console.log(`[Kick] Subscribing to @${slugOf(key)}...`);
+    ws = kickProvider.connect(slugOf(key));
+  } else {
+    // TikTok عبر EulerStream
+    // الاتصال من السيرفر مباشرة بالـ apiKey (ما يحتاج JWT — الـ JWT مخصص لتطبيقات المتصفح)
+    const wsParams = new URLSearchParams({
+      uniqueId: key,
+      apiKey: EULER_KEY || '',
+      'features.bundleEvents': 'true',      // يجمّع الأحداث داخل packet.messages
+      'features.normalizeUniqueId': 'true',
+      'features.syntheticPresence': 'true', // أحداث دخول/خروج المشاهدين
+    });
+    ws = new WebSocket(`${EULER_WS_HOST}?${wsParams.toString()}`);
+  }
   room.tiktok = ws;
 
   // Helper: normalize user data from EulerStream format
@@ -2206,7 +2247,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = 'v2.1.0-euler';
+const VERSION = 'v2.2.0-multi';
 const PORT = process.env.PORT || 3000;
 // ── شبكات أمان على مستوى العملية ─────────────────────────
 // أي خطأ غير معالَج (مثل فشل مصافحة WebSocket بـ 522 من Cloudflare)
